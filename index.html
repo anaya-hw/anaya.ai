@@ -8,12 +8,12 @@
   <meta name="apple-mobile-web-app-title" content="Whiskers">
   <meta name="theme-color" content="#FF8B5E">
   <title>Whiskers Learning Companion</title>
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐱</text></svg>">
   <link rel="manifest" href="manifest.json">
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- Tesseract.js with specific version that works reliably -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body, #root { 
@@ -29,6 +29,7 @@
     @keyframes bounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
     @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,139,94,0.4); } 50% { box-shadow: 0 0 0 15px rgba(255,139,94,0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .loading-spinner {
       width: 50px; height: 50px;
       border: 4px solid #FFE4D6;
@@ -36,7 +37,6 @@
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -44,12 +44,17 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-    // ============== CONFIGURATION ==============
+    // ============================================================
+    // CONFIGURATION - SET YOUR API KEY HERE
+    // ============================================================
     const CONFIG = {
-      // Set your Claude API key here (or leave empty to use demo mode)
+      // Paste your Claude API key here (get one from console.anthropic.com)
       ANTHROPIC_API_KEY: '',
-      USE_DEMO_MODE: true // Set to false when you add your API key
+      
+      // Set to false once you add your API key above
+      USE_DEMO_MODE: true
     };
+    // ============================================================
 
     // ============== ANIMATED CAT COMPONENT ==============
     const WhiskersCat = ({ mood = 'happy', size = 200, isTalking = false }) => {
@@ -308,7 +313,8 @@
       const speak = useCallback((text) => {
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(text);
+          const cleanText = text.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
+          const utterance = new SpeechSynthesisUtterance(cleanText);
           utterance.rate = 0.85;
           utterance.pitch = 1.1;
           utterance.onstart = () => setIsSpeaking(true);
@@ -355,84 +361,110 @@
     const generateDemoLesson = (problemText) => {
       const text = problemText.toLowerCase();
       
-      // Math problems
-      if (text.match(/\d\s*[\+\-\×\÷\*\/]\s*\d/) || text.includes('add') || text.includes('plus') || text.includes('sum')) {
-        const match = problemText.match(/(\d+)\s*[\+\+]\s*(\d+)/);
-        if (match) {
-          const a = parseInt(match[1]);
-          const b = parseInt(match[2]);
-          const sum = a + b;
-          return {
-            subject: 'Math',
-            steps: [
-              { text: `Let's solve ${a} + ${b} together! 🎯`, emoji: '🧮', type: 'intro' },
-              { text: `First, let's count ${a} objects!`, emoji: '🍎'.repeat(Math.min(a, 10)), type: 'visual' },
-              { text: `Great! Now let's add ${b} more!`, emoji: '🍎'.repeat(Math.min(b, 10)), type: 'visual' },
-              { text: `Count them all together: 1, 2, 3...`, emoji: '👆', type: 'action' },
-              { text: `We have ${sum} in total!`, emoji: '🍎'.repeat(Math.min(sum, 10)), type: 'visual' },
-              { text: `${a} + ${b} = ${sum} ✨`, emoji: '🎉', type: 'answer' },
-              { text: `Amazing job! You're a math star! 🌟`, emoji: '⭐', type: 'celebrate' }
-            ]
-          };
-        }
-      }
-      
-      // Subtraction
-      if (text.match(/\d\s*[\-]\s*\d/) || text.includes('minus') || text.includes('subtract') || text.includes('take away')) {
-        const match = problemText.match(/(\d+)\s*[\-]\s*(\d+)/);
-        if (match) {
-          const a = parseInt(match[1]);
-          const b = parseInt(match[2]);
-          const diff = a - b;
-          return {
-            subject: 'Math',
-            steps: [
-              { text: `Let's solve ${a} - ${b} together! 🎯`, emoji: '🧮', type: 'intro' },
-              { text: `Start with ${a} cookies!`, emoji: '🍪'.repeat(Math.min(a, 10)), type: 'visual' },
-              { text: `Now take away ${b} cookies...`, emoji: '👋', type: 'action' },
-              { text: `How many are left?`, emoji: '🤔', type: 'think' },
-              { text: `We have ${diff} cookies left!`, emoji: '🍪'.repeat(Math.min(Math.max(diff, 0), 10)), type: 'visual' },
-              { text: `${a} - ${b} = ${diff} ✨`, emoji: '🎉', type: 'answer' },
-              { text: `You did it! Super work! 🌟`, emoji: '⭐', type: 'celebrate' }
-            ]
-          };
-        }
-      }
-      
-      // Reading/letters
-      if (text.match(/[a-z]/i) && text.length < 20 && !text.match(/\d/)) {
+      // Math - Addition
+      const addMatch = problemText.match(/(\d+)\s*[\+\＋]\s*(\d+)/);
+      if (addMatch) {
+        const a = parseInt(addMatch[1]);
+        const b = parseInt(addMatch[2]);
+        const sum = a + b;
         return {
-          subject: 'Reading',
+          subject: 'Math',
+          originalText: problemText,
           steps: [
-            { text: `Let's read this word together! 📖`, emoji: '📚', type: 'intro' },
-            { text: `The word is: "${problemText.trim()}"`, emoji: '👀', type: 'visual' },
-            { text: `Let's sound it out slowly...`, emoji: '🗣️', type: 'action' },
-            { text: `Great job sounding it out!`, emoji: '👏', type: 'celebrate' },
-            { text: `Now let's say it together!`, emoji: '🎤', type: 'action' },
-            { text: `Wonderful reading! 🌟`, emoji: '⭐', type: 'celebrate' }
+            { text: `Let's solve ${a} + ${b} together! 🎯`, emoji: '🧮', type: 'intro' },
+            { text: `First, let's count ${a} apples!`, emoji: '🍎'.repeat(Math.min(a, 10)), type: 'visual' },
+            { text: `Great! Now let's add ${b} more apples!`, emoji: '🍏'.repeat(Math.min(b, 10)), type: 'visual' },
+            { text: `Put them all together and count!`, emoji: '👆', type: 'action' },
+            { text: `1... 2... 3... keep counting!`, emoji: '🔢', type: 'action' },
+            { text: `We have ${sum} apples in total!`, emoji: '🍎'.repeat(Math.min(sum, 10)), type: 'visual' },
+            { text: `${a} + ${b} = ${sum} ✨`, emoji: '✅', type: 'answer' },
+            { text: `Amazing job! You're a math superstar! 🌟`, emoji: '⭐', type: 'celebrate' }
           ]
         };
       }
       
-      // Default generic lesson
+      // Math - Subtraction
+      const subMatch = problemText.match(/(\d+)\s*[\-\−]\s*(\d+)/);
+      if (subMatch) {
+        const a = parseInt(subMatch[1]);
+        const b = parseInt(subMatch[2]);
+        const diff = Math.max(a - b, 0);
+        return {
+          subject: 'Math',
+          originalText: problemText,
+          steps: [
+            { text: `Let's solve ${a} - ${b} together! 🎯`, emoji: '🧮', type: 'intro' },
+            { text: `Start with ${a} cookies!`, emoji: '🍪'.repeat(Math.min(a, 10)), type: 'visual' },
+            { text: `Now we take away ${b} cookies...`, emoji: '👋', type: 'action' },
+            { text: `Bye bye cookies!`, emoji: '🍪'.repeat(Math.min(b, 10)) + '➡️', type: 'visual' },
+            { text: `How many cookies are left?`, emoji: '🤔', type: 'think' },
+            { text: `Count what's left: ${diff} cookies!`, emoji: '🍪'.repeat(Math.min(diff, 10)), type: 'visual' },
+            { text: `${a} - ${b} = ${diff} ✨`, emoji: '✅', type: 'answer' },
+            { text: `You did it! Super work! 🌟`, emoji: '⭐', type: 'celebrate' }
+          ]
+        };
+      }
+      
+      // Any numbers detected - generic math help
+      const numbers = problemText.match(/\d+/g);
+      if (numbers && numbers.length >= 1) {
+        return {
+          subject: 'Math',
+          originalText: problemText,
+          steps: [
+            { text: `I see some numbers! Let's figure this out! 🎯`, emoji: '🔢', type: 'intro' },
+            { text: `I found: ${numbers.join(', ')}`, emoji: '👀', type: 'visual' },
+            { text: `Let's think about what to do with these numbers...`, emoji: '🤔', type: 'think' },
+            { text: `Are we adding? Subtracting? Let's see!`, emoji: '➕➖', type: 'action' },
+            { text: `Try counting on your fingers!`, emoji: '🖐️', type: 'action' },
+            { text: `You're doing great! Keep thinking!`, emoji: '💪', type: 'encourage' },
+            { text: `Wonderful work trying this problem! 🌟`, emoji: '⭐', type: 'celebrate' }
+          ]
+        };
+      }
+      
+      // Reading/Word help
+      if (text.length > 0 && text.length < 50) {
+        const words = problemText.trim().split(/\s+/);
+        return {
+          subject: 'Reading',
+          originalText: problemText,
+          steps: [
+            { text: `Let's read together! 📖`, emoji: '📚', type: 'intro' },
+            { text: `I see: "${problemText.trim()}"`, emoji: '👀', type: 'visual' },
+            { text: `Let's sound it out slowly...`, emoji: '🗣️', type: 'action' },
+            { text: `Listen carefully to each sound!`, emoji: '👂', type: 'action' },
+            { text: `Now say it with me!`, emoji: '🎤', type: 'action' },
+            { text: `Great job sounding it out!`, emoji: '👏', type: 'celebrate' },
+            { text: `You're becoming a great reader! 🌟`, emoji: '⭐', type: 'celebrate' }
+          ]
+        };
+      }
+      
+      // Default fallback
       return {
         subject: 'Learning',
+        originalText: problemText,
         steps: [
-          { text: `Let's work on this together! 🎯`, emoji: '📝', type: 'intro' },
-          { text: `Here's what I see: "${problemText.slice(0, 50)}..."`, emoji: '👀', type: 'visual' },
-          { text: `Let's break this down step by step!`, emoji: '🔍', type: 'action' },
-          { text: `Think about what we need to find...`, emoji: '🤔', type: 'think' },
-          { text: `You're doing great! Keep going!`, emoji: '💪', type: 'encourage' },
-          { text: `Excellent work on this! 🌟`, emoji: '⭐', type: 'celebrate' }
+          { text: `Let's look at this together! 🎯`, emoji: '📝', type: 'intro' },
+          { text: `Hmm, let me see what we have here...`, emoji: '🔍', type: 'visual' },
+          { text: `Let's break it into small parts!`, emoji: '✂️', type: 'action' },
+          { text: `Think about what you already know!`, emoji: '🤔', type: 'think' },
+          { text: `You're doing great! Keep trying!`, emoji: '💪', type: 'encourage' },
+          { text: `Excellent effort! I'm proud of you! 🌟`, emoji: '⭐', type: 'celebrate' }
         ]
       };
     };
 
-    // ============== AI LESSON GENERATION ==============
+    // ============== CLAUDE AI LESSON GENERATION ==============
     const generateAiLesson = async (problemText) => {
+      // Use demo mode if no API key
       if (CONFIG.USE_DEMO_MODE || !CONFIG.ANTHROPIC_API_KEY) {
+        console.log('Using demo mode (no API key set)');
         return generateDemoLesson(problemText);
       }
+      
+      console.log('Calling Claude API...');
       
       try {
         const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -448,33 +480,41 @@
             max_tokens: 1024,
             messages: [{
               role: 'user',
-              content: `You are a friendly cat teacher helping a kindergartener (age 5-6) with homework. 
-              
-The student needs help with: "${problemText}"
+              content: `You are Whiskers, a friendly cat teacher helping a kindergartener (age 5-6) with their homework.
 
-Create a simple, encouraging lesson. Respond ONLY with valid JSON in this exact format:
-{
-  "subject": "Math" or "Reading" or "Science",
-  "steps": [
-    {"text": "step explanation", "emoji": "relevant emoji(s)", "type": "intro|visual|action|think|answer|celebrate"}
-  ]
-}
+The student's homework says: "${problemText}"
+
+Create a fun, encouraging lesson to help them understand. Respond with ONLY valid JSON (no markdown, no code blocks):
+
+{"subject":"Math or Reading or Science","steps":[{"text":"short sentence","emoji":"relevant emojis","type":"intro or visual or action or think or answer or celebrate"}]}
 
 Rules:
-- Use 5-7 simple steps
-- Each step should be ONE short sentence (under 15 words)
-- Use lots of emojis to visualize concepts
+- 6-8 simple steps
+- Each step: ONE short sentence (max 12 words)
+- Use counting objects for math (apples 🍎, cookies 🍪, stars ⭐)
 - Be very encouraging and patient
-- For math: use counting objects (apples, cookies, stars)
-- For reading: break down sounds and letters
-- End with celebration!`
+- Use simple kindergarten words
+- End with celebration!
+- For math: show the problem visually with emojis
+- For reading: help sound out words`
             }]
           })
         });
         
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('API Error:', response.status, errorText);
+          throw new Error(`API error: ${response.status}`);
+        }
+        
         const data = await response.json();
+        console.log('Claude response:', data);
+        
         const content = data.content[0].text;
-        return JSON.parse(content);
+        const lesson = JSON.parse(content);
+        lesson.originalText = problemText;
+        return lesson;
+        
       } catch (error) {
         console.error('AI lesson error:', error);
         return generateDemoLesson(problemText);
@@ -495,9 +535,11 @@ Rules:
       ];
       
       useEffect(() => {
-        const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+        const greeting = profile.name 
+          ? `Hi ${profile.name}! 🌟 Ready to learn today?`
+          : greetings[Math.floor(Math.random() * greetings.length)];
         setDialogue(greeting);
-        setTimeout(() => speak(greeting.replace(/[🌟🎉⭐😺]/g, '')), 500);
+        setTimeout(() => speak(greeting), 500);
       }, []);
       
       return (
@@ -540,6 +582,18 @@ Rules:
                 <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#FF8B5E' }}>{streak}</span>
               </div>
             </div>
+            
+            {/* Mode indicator */}
+            <div style={{
+              background: CONFIG.USE_DEMO_MODE ? 'rgba(255,193,7,0.2)' : 'rgba(76,175,80,0.2)',
+              borderRadius: '12px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              color: CONFIG.USE_DEMO_MODE ? '#F57C00' : '#388E3C'
+            }}>
+              {CONFIG.USE_DEMO_MODE ? '📋 Demo Mode' : '🤖 AI Mode'}
+            </div>
+            
             <button
               onClick={onProfile}
               style={{
@@ -630,20 +684,28 @@ Rules:
       const [hasCamera, setHasCamera] = useState(true);
       const [stream, setStream] = useState(null);
       const [cameraReady, setCameraReady] = useState(false);
+      const [error, setError] = useState(null);
       
       useEffect(() => {
         const startCamera = async () => {
           try {
             const mediaStream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+              video: { 
+                facingMode: 'environment', 
+                width: { ideal: 1920 }, 
+                height: { ideal: 1080 } 
+              }
             });
             if (videoRef.current) {
               videoRef.current.srcObject = mediaStream;
               setStream(mediaStream);
-              setCameraReady(true);
+              videoRef.current.onloadedmetadata = () => {
+                setCameraReady(true);
+              };
             }
           } catch (err) {
             console.error('Camera error:', err);
+            setError(err.message);
             setHasCamera(false);
           }
         };
@@ -661,8 +723,8 @@ Rules:
         if (videoRef.current && canvasRef.current) {
           const video = videoRef.current;
           const canvas = canvasRef.current;
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
+          canvas.width = video.videoWidth || 1280;
+          canvas.height = video.videoHeight || 720;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(video, 0, 0);
           const imageData = canvas.toDataURL('image/jpeg', 0.9);
@@ -692,7 +754,8 @@ Rules:
           height: '100%',
           background: '#000',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          position: 'relative'
         }}>
           {/* Header */}
           <div style={{
@@ -734,6 +797,7 @@ Rules:
               ref={videoRef}
               autoPlay
               playsInline
+              muted
               style={{
                 width: '100%',
                 height: '100%',
@@ -748,11 +812,15 @@ Rules:
               alignItems: 'center',
               justifyContent: 'center',
               color: 'white',
-              padding: '20px'
+              padding: '20px',
+              textAlign: 'center'
             }}>
               <span style={{ fontSize: '60px', marginBottom: '20px' }}>📷</span>
-              <p style={{ fontSize: '18px', textAlign: 'center', marginBottom: '20px' }}>
-                Camera not available. Upload a photo instead!
+              <p style={{ fontSize: '18px', marginBottom: '10px' }}>
+                Camera not available
+              </p>
+              <p style={{ fontSize: '14px', color: '#aaa', marginBottom: '20px' }}>
+                {error || 'Please upload a photo instead'}
               </p>
             </div>
           )}
@@ -789,31 +857,55 @@ Rules:
               <input
                 type="file"
                 accept="image/*"
+                capture="environment"
                 onChange={handleFileUpload}
                 style={{ display: 'none' }}
               />
             </label>
             
             {/* Capture button */}
-            {hasCamera && cameraReady && (
+            {hasCamera && (
               <button
                 onClick={capturePhoto}
+                disabled={!cameraReady}
                 style={{
-                  background: 'white',
+                  background: cameraReady ? 'white' : '#666',
                   border: '4px solid #FF8B5E',
                   borderRadius: '50%',
                   width: '80px',
                   height: '80px',
-                  cursor: 'pointer',
+                  cursor: cameraReady ? 'pointer' : 'not-allowed',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '36px'
                 }}
               >
-                📷
+                {cameraReady ? '📷' : '⏳'}
               </button>
             )}
+            
+            {/* Alternative: File upload button for mobile */}
+            <label style={{
+              background: '#FF8B5E',
+              border: 'none',
+              borderRadius: '50%',
+              width: '56px',
+              height: '56px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '24px',
+              cursor: 'pointer'
+            }}>
+              🖼️
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                style={{ display: 'none' }}
+              />
+            </label>
           </div>
         </div>
       );
@@ -823,61 +915,84 @@ Rules:
     const ScanningScreen = ({ image, onComplete, onBack }) => {
       const [status, setStatus] = useState('Whiskers is looking at your homework...');
       const [progress, setProgress] = useState(0);
+      const [detectedText, setDetectedText] = useState('');
+      const [error, setError] = useState(null);
       const { speak, isSpeaking } = useTextToSpeech();
       
       useEffect(() => {
         speak("Let me take a look at your homework!");
-        
-        const runOCR = async () => {
-          try {
-            setStatus('Reading the words and numbers... 📖');
-            setProgress(20);
-            
-            const worker = await Tesseract.createWorker('eng');
-            
-            setProgress(40);
-            setStatus('Almost there... 🔍');
-            
-            const { data: { text } } = await worker.recognize(image);
-            
-            setProgress(70);
-            setStatus('Thinking about how to help you... 🤔');
-            
-            await worker.terminate();
-            
-            setProgress(90);
-            
-            // Generate lesson
-            const lesson = await generateAiLesson(text || 'Help me learn');
-            
-            setProgress(100);
-            setStatus('Got it! Let me teach you! 🎉');
-            speak("Got it! Let me teach you!");
-            
-            setTimeout(() => {
-              onComplete({
-                originalText: text || 'No text detected',
-                lesson: lesson
-              });
-            }, 1500);
-            
-          } catch (error) {
-            console.error('OCR Error:', error);
-            setStatus('Hmm, let me try a different way...');
-            
-            // Fallback
-            const lesson = generateDemoLesson('math problem');
-            setTimeout(() => {
-              onComplete({
-                originalText: 'Could not read image clearly',
-                lesson: lesson
-              });
-            }, 1500);
-          }
-        };
-        
         runOCR();
-      }, [image]);
+      }, []);
+      
+      const runOCR = async () => {
+        try {
+          setStatus('Starting up my reading glasses... 👓');
+          setProgress(10);
+          
+          // Check if Tesseract is loaded
+          if (typeof Tesseract === 'undefined') {
+            throw new Error('OCR library not loaded');
+          }
+          
+          setStatus('Reading the words and numbers... 📖');
+          setProgress(30);
+          
+          console.log('Starting Tesseract OCR...');
+          
+          const result = await Tesseract.recognize(
+            image,
+            'eng',
+            {
+              logger: m => {
+                console.log('Tesseract:', m);
+                if (m.status === 'recognizing text') {
+                  setProgress(30 + Math.round(m.progress * 40));
+                }
+              }
+            }
+          );
+          
+          const text = result.data.text.trim();
+          console.log('OCR Result:', text);
+          setDetectedText(text);
+          
+          setProgress(75);
+          setStatus('Found it! Now thinking about how to help... 🤔');
+          
+          if (!text) {
+            setStatus("Hmm, I couldn't read that clearly. Let me try my best! 🤔");
+          }
+          
+          // Generate lesson
+          setProgress(85);
+          const lesson = await generateAiLesson(text || '5 + 3 = ?');
+          
+          setProgress(100);
+          setStatus('Got it! Let me teach you! 🎉');
+          speak("Got it! Let me teach you!");
+          
+          setTimeout(() => {
+            onComplete({
+              originalText: text || 'Could not read clearly',
+              lesson: lesson
+            });
+          }, 1500);
+          
+        } catch (err) {
+          console.error('OCR Error:', err);
+          setError(err.message);
+          setStatus("Oops! Let me try a different way... 🔄");
+          
+          // Fallback to demo lesson
+          setTimeout(async () => {
+            const lesson = generateDemoLesson('3 + 2 = ?');
+            onComplete({
+              originalText: 'Demo problem: 3 + 2 = ?',
+              lesson: lesson
+            });
+          }, 2000);
+        }
+      };
       
       return (
         <div style={{
@@ -890,14 +1005,11 @@ Rules:
           justifyContent: 'center',
           padding: '24px'
         }}>
-          <WhiskersCat mood="thinking" size={200} isTalking={isSpeaking} />
+          <WhiskersCat mood="thinking" size={180} isTalking={isSpeaking} />
           
-          <div style={{
-            marginTop: '24px',
-            textAlign: 'center'
-          }}>
+          <div style={{ marginTop: '24px', textAlign: 'center', width: '100%', maxWidth: '400px' }}>
             <p style={{
-              fontSize: '24px',
+              fontSize: '22px',
               color: '#5D4E4E',
               marginBottom: '20px'
             }}>
@@ -906,11 +1018,12 @@ Rules:
             
             {/* Progress bar */}
             <div style={{
-              width: '280px',
+              width: '100%',
               height: '16px',
               background: '#FFE4D6',
               borderRadius: '8px',
-              overflow: 'hidden'
+              overflow: 'hidden',
+              marginBottom: '20px'
             }}>
               <div style={{
                 width: `${progress}%`,
@@ -920,13 +1033,43 @@ Rules:
                 transition: 'width 0.5s ease-out'
               }} />
             </div>
+            
+            {/* Detected text preview */}
+            {detectedText && (
+              <div style={{
+                background: 'white',
+                borderRadius: '12px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                border: '2px solid #E8F5E9'
+              }}>
+                <p style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>
+                  📝 I found this text:
+                </p>
+                <p style={{ fontSize: '16px', color: '#333' }}>
+                  {detectedText.slice(0, 100)}{detectedText.length > 100 ? '...' : ''}
+                </p>
+              </div>
+            )}
+            
+            {error && (
+              <div style={{
+                background: '#FFF3E0',
+                borderRadius: '12px',
+                padding: '12px 16px',
+                marginBottom: '16px'
+              }}>
+                <p style={{ fontSize: '14px', color: '#E65100' }}>
+                  ⚠️ {error}
+                </p>
+              </div>
+            )}
           </div>
           
           {/* Preview of captured image */}
           <div style={{
-            marginTop: '24px',
-            width: '200px',
-            height: '150px',
+            width: '180px',
+            height: '135px',
             borderRadius: '16px',
             overflow: 'hidden',
             border: '4px solid #FFE4D6',
@@ -946,7 +1089,7 @@ Rules:
           <button
             onClick={onBack}
             style={{
-              marginTop: '24px',
+              marginTop: '20px',
               background: 'transparent',
               border: '2px solid #FF8B5E',
               borderRadius: '20px',
@@ -973,7 +1116,7 @@ Rules:
       
       useEffect(() => {
         if (step) {
-          speak(step.text.replace(/[🎯🧮🍎👆🎉⭐🤔💪📝👀🔍📖🗣️👏🎤🍪👋]/g, ''));
+          speak(step.text);
         }
       }, [currentStep]);
       
@@ -981,13 +1124,12 @@ Rules:
         if (currentStep < steps.length - 1) {
           setCurrentStep(currentStep + 1);
         } else {
-          // Lesson complete!
           setShowCelebration(true);
           speak("Amazing job! You earned 3 stars!");
           onAddStars(3);
           setTimeout(() => {
             onComplete();
-          }, 3000);
+          }, 4000);
         }
       };
       
@@ -1014,7 +1156,7 @@ Rules:
             }}>
               🎉
             </div>
-            <WhiskersCat mood="celebrating" size={220} isTalking={isSpeaking} />
+            <WhiskersCat mood="celebrating" size={200} isTalking={isSpeaking} />
             <h1 style={{
               fontSize: '32px',
               color: '#FF8B5E',
@@ -1078,14 +1220,14 @@ Rules:
             </button>
             
             {/* Progress dots */}
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '200px' }}>
               {steps.map((_, i) => (
                 <div
                   key={i}
                   style={{
-                    width: i === currentStep ? '24px' : '12px',
-                    height: '12px',
-                    borderRadius: '6px',
+                    width: i === currentStep ? '20px' : '10px',
+                    height: '10px',
+                    borderRadius: '5px',
                     background: i <= currentStep ? '#FF8B5E' : '#FFE4D6',
                     transition: 'all 0.3s'
                   }}
@@ -1112,26 +1254,30 @@ Rules:
             alignItems: 'center',
             justifyContent: 'center',
             padding: '24px',
-            gap: '20px'
+            gap: '16px',
+            overflow: 'auto'
           }}>
             <SpeechBubble text={step.text} key={currentStep} />
             
             <WhiskersCat 
               mood={step.type === 'celebrate' ? 'celebrating' : step.type === 'think' ? 'thinking' : 'happy'} 
-              size={180} 
+              size={160} 
               isTalking={isSpeaking} 
             />
             
             {/* Visual emoji display */}
             {step.emoji && (
               <div style={{
-                fontSize: '48px',
-                padding: '20px',
-                background: 'rgba(255,255,255,0.8)',
-                borderRadius: '24px',
+                fontSize: '42px',
+                padding: '16px 24px',
+                background: 'rgba(255,255,255,0.9)',
+                borderRadius: '20px',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
                 animation: 'float 2s ease-in-out infinite',
-                letterSpacing: '8px'
+                letterSpacing: '4px',
+                textAlign: 'center',
+                maxWidth: '300px',
+                wordBreak: 'break-all'
               }}>
                 {step.emoji}
               </div>
@@ -1155,7 +1301,7 @@ Rules:
                 border: 'none',
                 borderRadius: '20px',
                 padding: '18px',
-                fontSize: '20px',
+                fontSize: '18px',
                 cursor: currentStep === 0 ? 'not-allowed' : 'pointer',
                 color: currentStep === 0 ? '#AAA' : '#FF8B5E'
               }}
@@ -1188,9 +1334,17 @@ Rules:
     // ============== PROFILE SCREEN ==============
     const ProfileScreen = ({ profile, setProfile, stars, streak, onBack }) => {
       const [name, setName] = useState(profile.name || '');
+      const [apiKey, setApiKey] = useState(CONFIG.ANTHROPIC_API_KEY || '');
+      const [showApiInput, setShowApiInput] = useState(false);
       
       const saveName = () => {
         setProfile({ ...profile, name: name });
+      };
+      
+      const saveApiKey = () => {
+        CONFIG.ANTHROPIC_API_KEY = apiKey;
+        CONFIG.USE_DEMO_MODE = !apiKey;
+        alert(apiKey ? 'API key saved! AI mode enabled.' : 'API key cleared. Demo mode enabled.');
       };
       
       return (
@@ -1199,7 +1353,8 @@ Rules:
           height: '100%',
           background: 'linear-gradient(180deg, #FFF8F0 0%, #FFF5E8 100%)',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          overflow: 'auto'
         }}>
           {/* Header */}
           <div style={{
@@ -1232,9 +1387,9 @@ Rules:
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: '24px'
+            gap: '20px'
           }}>
-            <WhiskersCat mood="happy" size={150} />
+            <WhiskersCat mood="happy" size={130} />
             
             {/* Name input */}
             <div style={{
@@ -1273,7 +1428,7 @@ Rules:
             {/* Stats */}
             <div style={{
               display: 'flex',
-              gap: '20px',
+              gap: '16px',
               width: '100%',
               maxWidth: '400px'
             }}>
@@ -1281,24 +1436,100 @@ Rules:
                 flex: 1,
                 background: 'rgba(255,213,79,0.2)',
                 borderRadius: '20px',
-                padding: '20px',
+                padding: '16px',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '40px' }}>⭐</div>
-                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#FFB300' }}>{stars}</div>
-                <div style={{ color: '#888' }}>Total Stars</div>
+                <div style={{ fontSize: '36px' }}>⭐</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#FFB300' }}>{stars}</div>
+                <div style={{ color: '#888', fontSize: '14px' }}>Total Stars</div>
               </div>
               <div style={{
                 flex: 1,
                 background: 'rgba(255,139,94,0.2)',
                 borderRadius: '20px',
-                padding: '20px',
+                padding: '16px',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '40px' }}>🔥</div>
-                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#FF8B5E' }}>{streak}</div>
-                <div style={{ color: '#888' }}>Day Streak</div>
+                <div style={{ fontSize: '36px' }}>🔥</div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#FF8B5E' }}>{streak}</div>
+                <div style={{ color: '#888', fontSize: '14px' }}>Day Streak</div>
               </div>
+            </div>
+            
+            {/* API Key section */}
+            <div style={{
+              background: 'white',
+              borderRadius: '20px',
+              padding: '20px',
+              width: '100%',
+              maxWidth: '400px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+            }}>
+              <div 
+                onClick={() => setShowApiInput(!showApiInput)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '16px', fontWeight: '500', color: '#5D4E4E' }}>
+                    🤖 AI Settings
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#888' }}>
+                    {CONFIG.USE_DEMO_MODE ? 'Demo mode (no API key)' : 'AI mode enabled ✓'}
+                  </div>
+                </div>
+                <span style={{ fontSize: '20px' }}>{showApiInput ? '▼' : '▶'}</span>
+              </div>
+              
+              {showApiInput && (
+                <div style={{ marginTop: '16px' }}>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '14px',
+                    color: '#888',
+                    marginBottom: '8px'
+                  }}>
+                    Claude API Key (from console.anthropic.com)
+                  </label>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-ant-..."
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      fontSize: '14px',
+                      border: '2px solid #FFE4D6',
+                      borderRadius: '12px',
+                      outline: 'none',
+                      marginBottom: '12px'
+                    }}
+                  />
+                  <button
+                    onClick={saveApiKey}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      background: '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontSize: '16px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Save API Key
+                  </button>
+                  <p style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
+                    Get your API key from console.anthropic.com. This enables real AI-powered lessons!
+                  </p>
+                </div>
+              )}
             </div>
             
             {/* Info */}
@@ -1308,7 +1539,7 @@ Rules:
               padding: '16px 20px',
               maxWidth: '400px'
             }}>
-              <p style={{ fontSize: '16px', color: '#5D4E4E', lineHeight: 1.6 }}>
+              <p style={{ fontSize: '15px', color: '#5D4E4E', lineHeight: 1.6 }}>
                 🌟 Keep learning every day to build your streak!<br/>
                 📸 Scan homework to earn stars!
               </p>
