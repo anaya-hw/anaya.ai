@@ -12,7 +12,6 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Tesseract.js with specific version that works reliably -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -30,31 +29,77 @@
     @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,139,94,0.4); } 50% { box-shadow: 0 0 0 15px rgba(255,139,94,0); } }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .loading-spinner {
-      width: 50px; height: 50px;
-      border: 4px solid #FFE4D6;
-      border-top-color: #FF8B5E;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
   </style>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback } = React;
+    const { useState, useEffect, useRef, useCallback, createContext, useContext } = React;
 
     // ============================================================
-    // CONFIGURATION - SET YOUR API KEY HERE
+    // CONFIGURATION - SET YOUR API KEYS HERE
     // ============================================================
     const CONFIG = {
-      // Paste your Claude API key here (get one from console.anthropic.com)
-      ANTHROPIC_API_KEY: '',
+      // OpenAI API Key (for ChatGPT) - get from platform.openai.com
+      OPENAI_API_KEY: '',
       
-      // Set to false once you add your API key above
-      USE_DEMO_MODE: true
+      // ElevenLabs API Key (for realistic voice) - get from elevenlabs.io
+      ELEVENLABS_API_KEY: '',
+      
+      // ElevenLabs Voice ID - some good kid-friendly options:
+      // 'EXAVITQu4vr4xnSDxMaL' = Bella (warm female)
+      // 'jBpfuIE2acCO8z3wKNLl' = Gigi (young female, animated)
+      // 'XB0fDUnXU5powFXDhCwa' = Charlotte (warm, friendly)
+      // 'pqHfZKP75CvOlQylNhV4' = Bill (friendly male)
+      ELEVENLABS_VOICE_ID: 'jBpfuIE2acCO8z3wKNLl',
+      
+      // Set to false once you add API keys
+      USE_DEMO_MODE: true,
+      
+      // Voice settings
+      USE_ELEVENLABS: false // Set to true when you add ElevenLabs key
     };
     // ============================================================
+
+    // ============== SETTINGS CONTEXT ==============
+    const SettingsContext = createContext();
+
+    const useSettings = () => useContext(SettingsContext);
+
+    const SettingsProvider = ({ children }) => {
+      const [settings, setSettings] = useState(() => {
+        try {
+          const saved = localStorage.getItem('whiskers_settings');
+          return saved ? JSON.parse(saved) : {
+            openaiKey: '',
+            elevenlabsKey: '',
+            elevenlabsVoiceId: 'jBpfuIE2acCO8z3wKNLl',
+            useElevenlabs: false,
+            useDemoMode: true
+          };
+        } catch {
+          return {
+            openaiKey: '',
+            elevenlabsKey: '',
+            elevenlabsVoiceId: 'jBpfuIE2acCO8z3wKNLl',
+            useElevenlabs: false,
+            useDemoMode: true
+          };
+        }
+      });
+
+      const updateSettings = (newSettings) => {
+        const updated = { ...settings, ...newSettings };
+        setSettings(updated);
+        localStorage.setItem('whiskers_settings', JSON.stringify(updated));
+      };
+
+      return (
+        <SettingsContext.Provider value={{ settings, updateSettings }}>
+          {children}
+        </SettingsContext.Provider>
+      );
+    };
 
     // ============== ANIMATED CAT COMPONENT ==============
     const WhiskersCat = ({ mood = 'happy', size = 200, isTalking = false }) => {
@@ -306,17 +351,96 @@
       );
     };
 
-    // ============== TEXT TO SPEECH ==============
+    // ============== TEXT TO SPEECH WITH ELEVENLABS ==============
     const useTextToSpeech = () => {
       const [isSpeaking, setIsSpeaking] = useState(false);
+      const audioRef = useRef(null);
+      const { settings } = useSettings();
       
-      const speak = useCallback((text) => {
+      const speakWithElevenLabs = useCallback(async (text) => {
+        if (!settings.elevenlabsKey) {
+          return false;
+        }
+        
+        try {
+          setIsSpeaking(true);
+          
+          const response = await fetch(
+            `https://api.elevenlabs.io/v1/text-to-speech/${settings.elevenlabsVoiceId || 'jBpfuIE2acCO8z3wKNLl'}`,
+            {
+              method: 'POST',
+              headers: {
+                'Accept': 'audio/mpeg',
+                'Content-Type': 'application/json',
+                'xi-api-key': settings.elevenlabsKey
+              },
+              body: JSON.stringify({
+                text: text,
+                model_id: 'eleven_monolingual_v1',
+                voice_settings: {
+                  stability: 0.6,
+                  similarity_boost: 0.85,
+                  style: 0.4,
+                  use_speaker_boost: true
+                }
+              })
+            }
+          );
+          
+          if (!response.ok) {
+            throw new Error('ElevenLabs API error');
+          }
+          
+          const audioBlob = await response.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          
+          if (audioRef.current) {
+            audioRef.current.pause();
+          }
+          
+          const audio = new Audio(audioUrl);
+          audioRef.current = audio;
+          
+          audio.onended = () => {
+            setIsSpeaking(false);
+            URL.revokeObjectURL(audioUrl);
+          };
+          
+          audio.onerror = () => {
+            setIsSpeaking(false);
+            URL.revokeObjectURL(audioUrl);
+          };
+          
+          await audio.play();
+          return true;
+          
+        } catch (error) {
+          console.error('ElevenLabs error:', error);
+          setIsSpeaking(false);
+          return false;
+        }
+      }, [settings]);
+      
+      const speakWithBrowser = useCallback((text) => {
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
           const cleanText = text.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
           const utterance = new SpeechSynthesisUtterance(cleanText);
           utterance.rate = 0.85;
-          utterance.pitch = 1.1;
+          utterance.pitch = 1.2;
+          
+          // Try to find a better voice
+          const voices = window.speechSynthesis.getVoices();
+          const preferredVoice = voices.find(v => 
+            v.name.includes('Samantha') || 
+            v.name.includes('Karen') ||
+            v.name.includes('Victoria') ||
+            v.name.includes('Google UK English Female')
+          );
+          if (preferredVoice) {
+            utterance.voice = preferredVoice;
+          }
+          
           utterance.onstart = () => setIsSpeaking(true);
           utterance.onend = () => setIsSpeaking(false);
           utterance.onerror = () => setIsSpeaking(false);
@@ -324,11 +448,28 @@
         }
       }, []);
       
+      const speak = useCallback(async (text) => {
+        const cleanText = text.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
+        
+        if (settings.useElevenlabs && settings.elevenlabsKey) {
+          const success = await speakWithElevenLabs(cleanText);
+          if (!success) {
+            speakWithBrowser(cleanText);
+          }
+        } else {
+          speakWithBrowser(cleanText);
+        }
+      }, [settings, speakWithElevenLabs, speakWithBrowser]);
+      
       const stop = useCallback(() => {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
-          setIsSpeaking(false);
         }
+        setIsSpeaking(false);
       }, []);
       
       return { speak, stop, isSpeaking };
@@ -361,7 +502,6 @@
     const generateDemoLesson = (problemText) => {
       const text = problemText.toLowerCase();
       
-      // Math - Addition
       const addMatch = problemText.match(/(\d+)\s*[\+\＋]\s*(\d+)/);
       if (addMatch) {
         const a = parseInt(addMatch[1]);
@@ -371,19 +511,18 @@
           subject: 'Math',
           originalText: problemText,
           steps: [
-            { text: `Let's solve ${a} + ${b} together! 🎯`, emoji: '🧮', type: 'intro' },
+            { text: `Let's solve ${a} plus ${b} together!`, emoji: '🧮', type: 'intro' },
             { text: `First, let's count ${a} apples!`, emoji: '🍎'.repeat(Math.min(a, 10)), type: 'visual' },
             { text: `Great! Now let's add ${b} more apples!`, emoji: '🍏'.repeat(Math.min(b, 10)), type: 'visual' },
             { text: `Put them all together and count!`, emoji: '👆', type: 'action' },
-            { text: `1... 2... 3... keep counting!`, emoji: '🔢', type: 'action' },
+            { text: `One, two, three... keep counting!`, emoji: '🔢', type: 'action' },
             { text: `We have ${sum} apples in total!`, emoji: '🍎'.repeat(Math.min(sum, 10)), type: 'visual' },
-            { text: `${a} + ${b} = ${sum} ✨`, emoji: '✅', type: 'answer' },
-            { text: `Amazing job! You're a math superstar! 🌟`, emoji: '⭐', type: 'celebrate' }
+            { text: `${a} plus ${b} equals ${sum}!`, emoji: '✅', type: 'answer' },
+            { text: `Amazing job! You're a math superstar!`, emoji: '⭐', type: 'celebrate' }
           ]
         };
       }
       
-      // Math - Subtraction
       const subMatch = problemText.match(/(\d+)\s*[\-\−]\s*(\d+)/);
       if (subMatch) {
         const a = parseInt(subMatch[1]);
@@ -393,124 +532,119 @@
           subject: 'Math',
           originalText: problemText,
           steps: [
-            { text: `Let's solve ${a} - ${b} together! 🎯`, emoji: '🧮', type: 'intro' },
+            { text: `Let's solve ${a} minus ${b} together!`, emoji: '🧮', type: 'intro' },
             { text: `Start with ${a} cookies!`, emoji: '🍪'.repeat(Math.min(a, 10)), type: 'visual' },
             { text: `Now we take away ${b} cookies...`, emoji: '👋', type: 'action' },
             { text: `Bye bye cookies!`, emoji: '🍪'.repeat(Math.min(b, 10)) + '➡️', type: 'visual' },
             { text: `How many cookies are left?`, emoji: '🤔', type: 'think' },
             { text: `Count what's left: ${diff} cookies!`, emoji: '🍪'.repeat(Math.min(diff, 10)), type: 'visual' },
-            { text: `${a} - ${b} = ${diff} ✨`, emoji: '✅', type: 'answer' },
-            { text: `You did it! Super work! 🌟`, emoji: '⭐', type: 'celebrate' }
+            { text: `${a} minus ${b} equals ${diff}!`, emoji: '✅', type: 'answer' },
+            { text: `You did it! Super work!`, emoji: '⭐', type: 'celebrate' }
           ]
         };
       }
       
-      // Any numbers detected - generic math help
       const numbers = problemText.match(/\d+/g);
       if (numbers && numbers.length >= 1) {
         return {
           subject: 'Math',
           originalText: problemText,
           steps: [
-            { text: `I see some numbers! Let's figure this out! 🎯`, emoji: '🔢', type: 'intro' },
+            { text: `I see some numbers! Let's figure this out!`, emoji: '🔢', type: 'intro' },
             { text: `I found: ${numbers.join(', ')}`, emoji: '👀', type: 'visual' },
-            { text: `Let's think about what to do with these numbers...`, emoji: '🤔', type: 'think' },
-            { text: `Are we adding? Subtracting? Let's see!`, emoji: '➕➖', type: 'action' },
+            { text: `Let's think about what to do with these numbers.`, emoji: '🤔', type: 'think' },
+            { text: `Are we adding? Or subtracting? Let's see!`, emoji: '➕➖', type: 'action' },
             { text: `Try counting on your fingers!`, emoji: '🖐️', type: 'action' },
             { text: `You're doing great! Keep thinking!`, emoji: '💪', type: 'encourage' },
-            { text: `Wonderful work trying this problem! 🌟`, emoji: '⭐', type: 'celebrate' }
+            { text: `Wonderful work trying this problem!`, emoji: '⭐', type: 'celebrate' }
           ]
         };
       }
       
-      // Reading/Word help
       if (text.length > 0 && text.length < 50) {
-        const words = problemText.trim().split(/\s+/);
         return {
           subject: 'Reading',
           originalText: problemText,
           steps: [
-            { text: `Let's read together! 📖`, emoji: '📚', type: 'intro' },
+            { text: `Let's read together!`, emoji: '📚', type: 'intro' },
             { text: `I see: "${problemText.trim()}"`, emoji: '👀', type: 'visual' },
             { text: `Let's sound it out slowly...`, emoji: '🗣️', type: 'action' },
             { text: `Listen carefully to each sound!`, emoji: '👂', type: 'action' },
             { text: `Now say it with me!`, emoji: '🎤', type: 'action' },
             { text: `Great job sounding it out!`, emoji: '👏', type: 'celebrate' },
-            { text: `You're becoming a great reader! 🌟`, emoji: '⭐', type: 'celebrate' }
+            { text: `You're becoming a great reader!`, emoji: '⭐', type: 'celebrate' }
           ]
         };
       }
       
-      // Default fallback
       return {
         subject: 'Learning',
         originalText: problemText,
         steps: [
-          { text: `Let's look at this together! 🎯`, emoji: '📝', type: 'intro' },
+          { text: `Let's look at this together!`, emoji: '📝', type: 'intro' },
           { text: `Hmm, let me see what we have here...`, emoji: '🔍', type: 'visual' },
           { text: `Let's break it into small parts!`, emoji: '✂️', type: 'action' },
           { text: `Think about what you already know!`, emoji: '🤔', type: 'think' },
           { text: `You're doing great! Keep trying!`, emoji: '💪', type: 'encourage' },
-          { text: `Excellent effort! I'm proud of you! 🌟`, emoji: '⭐', type: 'celebrate' }
+          { text: `Excellent effort! I'm proud of you!`, emoji: '⭐', type: 'celebrate' }
         ]
       };
     };
 
-    // ============== CLAUDE AI LESSON GENERATION ==============
-    const generateAiLesson = async (problemText) => {
-      // Use demo mode if no API key
-      if (CONFIG.USE_DEMO_MODE || !CONFIG.ANTHROPIC_API_KEY) {
-        console.log('Using demo mode (no API key set)');
+    // ============== CHATGPT AI LESSON GENERATION ==============
+    const generateAiLesson = async (problemText, settings) => {
+      if (settings.useDemoMode || !settings.openaiKey) {
+        console.log('Using demo mode');
         return generateDemoLesson(problemText);
       }
       
-      console.log('Calling Claude API...');
+      console.log('Calling ChatGPT API...');
       
       try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': CONFIG.ANTHROPIC_API_KEY,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true'
+            'Authorization': `Bearer ${settings.openaiKey}`
           },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1024,
+            model: 'gpt-4o-mini',
             messages: [{
+              role: 'system',
+              content: `You are Whiskers, a friendly cat teacher helping kindergarteners (age 5-6) with homework. 
+You must respond with ONLY valid JSON, no markdown or code blocks.
+Be warm, encouraging, patient, and use simple words a 5-year-old understands.`
+            }, {
               role: 'user',
-              content: `You are Whiskers, a friendly cat teacher helping a kindergartener (age 5-6) with their homework.
+              content: `The student's homework says: "${problemText}"
 
-The student's homework says: "${problemText}"
-
-Create a fun, encouraging lesson to help them understand. Respond with ONLY valid JSON (no markdown, no code blocks):
-
-{"subject":"Math or Reading or Science","steps":[{"text":"short sentence","emoji":"relevant emojis","type":"intro or visual or action or think or answer or celebrate"}]}
+Create a fun lesson. Respond with ONLY this JSON format:
+{"subject":"Math or Reading","steps":[{"text":"short sentence under 12 words","emoji":"emojis","type":"intro or visual or action or think or answer or celebrate"}]}
 
 Rules:
 - 6-8 simple steps
-- Each step: ONE short sentence (max 12 words)
-- Use counting objects for math (apples 🍎, cookies 🍪, stars ⭐)
-- Be very encouraging and patient
-- Use simple kindergarten words
-- End with celebration!
-- For math: show the problem visually with emojis
-- For reading: help sound out words`
-            }]
+- Use counting objects for math (apples, cookies, stars)
+- Be very encouraging
+- End with celebration`
+            }],
+            temperature: 0.7,
+            max_tokens: 800
           })
         });
         
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('API Error:', response.status, errorText);
+          console.error('OpenAI API Error:', response.status, errorText);
           throw new Error(`API error: ${response.status}`);
         }
         
         const data = await response.json();
-        console.log('Claude response:', data);
+        console.log('ChatGPT response:', data);
         
-        const content = data.content[0].text;
+        let content = data.choices[0].message.content;
+        // Clean up potential markdown formatting
+        content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        
         const lesson = JSON.parse(content);
         lesson.originalText = problemText;
         return lesson;
@@ -523,24 +657,36 @@ Rules:
 
     // ============== HOME SCREEN ==============
     const HomeScreen = ({ profile, stars, streak, onScan, onProfile }) => {
-      const [dialogue, setDialogue] = useState("Hi there, friend! 🌟 Ready to learn something amazing today?");
+      const [dialogue, setDialogue] = useState("Hi there, friend! Ready to learn something amazing today?");
       const [catMood, setCatMood] = useState('happy');
       const { speak, isSpeaking } = useTextToSpeech();
+      const { settings } = useSettings();
       
       const greetings = [
-        "Hi there, friend! 🌟 Ready to learn something amazing today?",
-        "Yay, you're here! Let's have fun learning! 🎉",
-        "Hello, superstar! What should we explore? ⭐",
-        "I'm so happy to see you! 😺"
+        "Hi there, friend! Ready to learn something amazing today?",
+        "Yay, you're here! Let's have fun learning!",
+        "Hello, superstar! What should we explore?",
+        "I'm so happy to see you!"
       ];
       
       useEffect(() => {
         const greeting = profile.name 
-          ? `Hi ${profile.name}! 🌟 Ready to learn today?`
+          ? `Hi ${profile.name}! Ready to learn today?`
           : greetings[Math.floor(Math.random() * greetings.length)];
         setDialogue(greeting);
         setTimeout(() => speak(greeting), 500);
       }, []);
+      
+      const getModeLabel = () => {
+        if (settings.useDemoMode) return '📋 Demo';
+        if (settings.openaiKey) return '🤖 ChatGPT';
+        return '📋 Demo';
+      };
+      
+      const getVoiceLabel = () => {
+        if (settings.useElevenlabs && settings.elevenlabsKey) return '🎙️ ElevenLabs';
+        return '🔊 Browser';
+      };
       
       return (
         <div style={{
@@ -558,40 +704,51 @@ Rules:
             alignItems: 'center',
             padding: '16px 24px'
           }}>
-            <div style={{ display: 'flex', gap: '16px' }}>
+            <div style={{ display: 'flex', gap: '12px' }}>
               <div style={{
                 background: 'rgba(255,213,79,0.2)',
                 borderRadius: '16px',
-                padding: '10px 18px',
+                padding: '10px 16px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px'
+                gap: '6px'
               }}>
-                <span style={{ fontSize: '24px', animation: 'sparkle 2s infinite' }}>⭐</span>
-                <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#FFB300' }}>{stars}</span>
+                <span style={{ fontSize: '22px', animation: 'sparkle 2s infinite' }}>⭐</span>
+                <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#FFB300' }}>{stars}</span>
               </div>
               <div style={{
                 background: 'rgba(255,139,94,0.2)',
                 borderRadius: '16px',
-                padding: '10px 18px',
+                padding: '10px 16px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px'
+                gap: '6px'
               }}>
-                <span style={{ fontSize: '24px' }}>🔥</span>
-                <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#FF8B5E' }}>{streak}</span>
+                <span style={{ fontSize: '22px' }}>🔥</span>
+                <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#FF8B5E' }}>{streak}</span>
               </div>
             </div>
             
-            {/* Mode indicator */}
-            <div style={{
-              background: CONFIG.USE_DEMO_MODE ? 'rgba(255,193,7,0.2)' : 'rgba(76,175,80,0.2)',
-              borderRadius: '12px',
-              padding: '6px 12px',
-              fontSize: '12px',
-              color: CONFIG.USE_DEMO_MODE ? '#F57C00' : '#388E3C'
-            }}>
-              {CONFIG.USE_DEMO_MODE ? '📋 Demo Mode' : '🤖 AI Mode'}
+            {/* Mode indicators */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{
+                background: settings.useDemoMode ? 'rgba(255,193,7,0.2)' : 'rgba(76,175,80,0.2)',
+                borderRadius: '10px',
+                padding: '4px 10px',
+                fontSize: '11px',
+                color: settings.useDemoMode ? '#F57C00' : '#388E3C'
+              }}>
+                {getModeLabel()}
+              </div>
+              <div style={{
+                background: settings.useElevenlabs ? 'rgba(156,39,176,0.2)' : 'rgba(158,158,158,0.2)',
+                borderRadius: '10px',
+                padding: '4px 10px',
+                fontSize: '11px',
+                color: settings.useElevenlabs ? '#7B1FA2' : '#616161'
+              }}>
+                {getVoiceLabel()}
+              </div>
             </div>
             
             <button
@@ -600,13 +757,13 @@ Rules:
                 background: 'white',
                 border: '2px solid #FFE4D6',
                 borderRadius: '50%',
-                width: '50px',
-                height: '50px',
-                fontSize: '24px',
+                width: '48px',
+                height: '48px',
+                fontSize: '22px',
                 cursor: 'pointer'
               }}
             >
-              👤
+              ⚙️
             </button>
           </div>
           
@@ -622,19 +779,19 @@ Rules:
           }}>
             <SpeechBubble text={dialogue} />
             
-            <WhiskersCat mood={catMood} size={220} isTalking={isSpeaking} />
+            <WhiskersCat mood={catMood} size={200} isTalking={isSpeaking} />
             
             {profile.name && (
               <div style={{
                 background: 'rgba(255,139,94,0.1)',
                 borderRadius: '20px',
-                padding: '12px 24px',
+                padding: '10px 20px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px'
+                gap: '8px'
               }}>
-                <span style={{ fontSize: '28px' }}>🐱</span>
-                <span style={{ fontSize: '22px', color: '#FF8B5E', fontWeight: '600' }}>
+                <span style={{ fontSize: '24px' }}>🐱</span>
+                <span style={{ fontSize: '20px', color: '#FF8B5E', fontWeight: '600' }}>
                   Hi, {profile.name}!
                 </span>
               </div>
@@ -644,7 +801,7 @@ Rules:
             <button
               onClick={() => {
                 setCatMood('excited');
-                setDialogue("Ooh! Let me see your homework! 📸");
+                setDialogue("Ooh! Let me see your homework!");
                 speak("Ooh! Let me see your homework!");
                 setTimeout(onScan, 1500);
               }}
@@ -652,22 +809,22 @@ Rules:
                 background: 'linear-gradient(135deg, #FF8B5E 0%, #FF7043 100%)',
                 border: 'none',
                 borderRadius: '28px',
-                padding: '24px 48px',
-                marginTop: '20px',
+                padding: '22px 44px',
+                marginTop: '16px',
                 cursor: 'pointer',
                 boxShadow: '0 8px 32px rgba(255,139,94,0.4)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '16px',
+                gap: '14px',
                 animation: 'pulse 2s infinite'
               }}
             >
-              <span style={{ fontSize: '42px' }}>📸</span>
+              <span style={{ fontSize: '38px' }}>📸</span>
               <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: '24px', color: 'white', fontWeight: 'bold' }}>
+                <div style={{ fontSize: '22px', color: 'white', fontWeight: 'bold' }}>
                   Scan Homework
                 </div>
-                <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.85)' }}>
+                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.85)' }}>
                   Take a photo of your worksheet
                 </div>
               </div>
@@ -757,7 +914,6 @@ Rules:
           flexDirection: 'column',
           position: 'relative'
         }}>
-          {/* Header */}
           <div style={{
             padding: '16px',
             display: 'flex',
@@ -791,7 +947,6 @@ Rules:
             <div style={{ width: '44px' }}></div>
           </div>
           
-          {/* Camera view */}
           {hasCamera ? (
             <video
               ref={videoRef}
@@ -827,7 +982,6 @@ Rules:
           
           <canvas ref={canvasRef} style={{ display: 'none' }} />
           
-          {/* Controls */}
           <div style={{
             position: 'absolute',
             bottom: 0,
@@ -840,7 +994,6 @@ Rules:
             gap: '30px',
             background: 'linear-gradient(transparent, rgba(0,0,0,0.8))'
           }}>
-            {/* Upload button */}
             <label style={{
               background: 'rgba(255,255,255,0.2)',
               border: '2px solid white',
@@ -863,7 +1016,6 @@ Rules:
               />
             </label>
             
-            {/* Capture button */}
             {hasCamera && (
               <button
                 onClick={capturePhoto}
@@ -885,7 +1037,6 @@ Rules:
               </button>
             )}
             
-            {/* Alternative: File upload button for mobile */}
             <label style={{
               background: '#FF8B5E',
               border: 'none',
@@ -918,6 +1069,7 @@ Rules:
       const [detectedText, setDetectedText] = useState('');
       const [error, setError] = useState(null);
       const { speak, isSpeaking } = useTextToSpeech();
+      const { settings } = useSettings();
       
       useEffect(() => {
         speak("Let me take a look at your homework!");
@@ -926,25 +1078,21 @@ Rules:
       
       const runOCR = async () => {
         try {
-          setStatus('Starting up my reading glasses... 👓');
+          setStatus('Starting up my reading glasses...');
           setProgress(10);
           
-          // Check if Tesseract is loaded
           if (typeof Tesseract === 'undefined') {
             throw new Error('OCR library not loaded');
           }
           
-          setStatus('Reading the words and numbers... 📖');
+          setStatus('Reading the words and numbers...');
           setProgress(30);
-          
-          console.log('Starting Tesseract OCR...');
           
           const result = await Tesseract.recognize(
             image,
             'eng',
             {
               logger: m => {
-                console.log('Tesseract:', m);
                 if (m.status === 'recognizing text') {
                   setProgress(30 + Math.round(m.progress * 40));
                 }
@@ -957,18 +1105,17 @@ Rules:
           setDetectedText(text);
           
           setProgress(75);
-          setStatus('Found it! Now thinking about how to help... 🤔');
+          setStatus('Found it! Now thinking about how to help...');
           
           if (!text) {
-            setStatus("Hmm, I couldn't read that clearly. Let me try my best! 🤔");
+            setStatus("Hmm, I couldn't read that clearly. Let me try my best!");
           }
           
-          // Generate lesson
           setProgress(85);
-          const lesson = await generateAiLesson(text || '5 + 3 = ?');
+          const lesson = await generateAiLesson(text || '5 + 3 = ?', settings);
           
           setProgress(100);
-          setStatus('Got it! Let me teach you! 🎉');
+          setStatus('Got it! Let me teach you!');
           speak("Got it! Let me teach you!");
           
           setTimeout(() => {
@@ -981,9 +1128,8 @@ Rules:
         } catch (err) {
           console.error('OCR Error:', err);
           setError(err.message);
-          setStatus("Oops! Let me try a different way... 🔄");
+          setStatus("Oops! Let me try a different way...");
           
-          // Fallback to demo lesson
           setTimeout(async () => {
             const lesson = generateDemoLesson('3 + 2 = ?');
             onComplete({
@@ -1005,36 +1151,30 @@ Rules:
           justifyContent: 'center',
           padding: '24px'
         }}>
-          <WhiskersCat mood="thinking" size={180} isTalking={isSpeaking} />
+          <WhiskersCat mood="thinking" size={160} isTalking={isSpeaking} />
           
-          <div style={{ marginTop: '24px', textAlign: 'center', width: '100%', maxWidth: '400px' }}>
-            <p style={{
-              fontSize: '22px',
-              color: '#5D4E4E',
-              marginBottom: '20px'
-            }}>
+          <div style={{ marginTop: '20px', textAlign: 'center', width: '100%', maxWidth: '360px' }}>
+            <p style={{ fontSize: '20px', color: '#5D4E4E', marginBottom: '16px' }}>
               {status}
             </p>
             
-            {/* Progress bar */}
             <div style={{
               width: '100%',
-              height: '16px',
+              height: '14px',
               background: '#FFE4D6',
-              borderRadius: '8px',
+              borderRadius: '7px',
               overflow: 'hidden',
-              marginBottom: '20px'
+              marginBottom: '16px'
             }}>
               <div style={{
                 width: `${progress}%`,
                 height: '100%',
                 background: 'linear-gradient(90deg, #FF8B5E, #FFB74D)',
-                borderRadius: '8px',
+                borderRadius: '7px',
                 transition: 'width 0.5s ease-out'
               }} />
             </div>
             
-            {/* Detected text preview */}
             {detectedText && (
               <div style={{
                 background: 'white',
@@ -1044,62 +1184,40 @@ Rules:
                 border: '2px solid #E8F5E9'
               }}>
                 <p style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>
-                  📝 I found this text:
+                  📝 I found:
                 </p>
                 <p style={{ fontSize: '16px', color: '#333' }}>
                   {detectedText.slice(0, 100)}{detectedText.length > 100 ? '...' : ''}
                 </p>
               </div>
             )}
-            
-            {error && (
-              <div style={{
-                background: '#FFF3E0',
-                borderRadius: '12px',
-                padding: '12px 16px',
-                marginBottom: '16px'
-              }}>
-                <p style={{ fontSize: '14px', color: '#E65100' }}>
-                  ⚠️ {error}
-                </p>
-              </div>
-            )}
           </div>
           
-          {/* Preview of captured image */}
           <div style={{
-            width: '180px',
-            height: '135px',
-            borderRadius: '16px',
+            width: '160px',
+            height: '120px',
+            borderRadius: '12px',
             overflow: 'hidden',
-            border: '4px solid #FFE4D6',
+            border: '3px solid #FFE4D6',
             boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
           }}>
-            <img
-              src={image}
-              alt="Captured homework"
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover'
-              }}
-            />
+            <img src={image} alt="Homework" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
           
           <button
             onClick={onBack}
             style={{
-              marginTop: '20px',
+              marginTop: '16px',
               background: 'transparent',
               border: '2px solid #FF8B5E',
-              borderRadius: '20px',
-              padding: '12px 24px',
+              borderRadius: '16px',
+              padding: '10px 20px',
               color: '#FF8B5E',
-              fontSize: '16px',
+              fontSize: '15px',
               cursor: 'pointer'
             }}
           >
-            ← Take another photo
+            ← Try again
           </button>
         </div>
       );
@@ -1127,16 +1245,12 @@ Rules:
           setShowCelebration(true);
           speak("Amazing job! You earned 3 stars!");
           onAddStars(3);
-          setTimeout(() => {
-            onComplete();
-          }, 4000);
+          setTimeout(onComplete, 4000);
         }
       };
       
       const prevStep = () => {
-        if (currentStep > 0) {
-          setCurrentStep(currentStep - 1);
-        }
+        if (currentStep > 0) setCurrentStep(currentStep - 1);
       };
       
       if (showCelebration) {
@@ -1150,40 +1264,15 @@ Rules:
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <div style={{
-              fontSize: '80px',
-              animation: 'bounce 0.5s infinite'
-            }}>
-              🎉
-            </div>
-            <WhiskersCat mood="celebrating" size={200} isTalking={isSpeaking} />
-            <h1 style={{
-              fontSize: '32px',
-              color: '#FF8B5E',
-              margin: '20px 0'
-            }}>
-              Amazing Job!
-            </h1>
-            <div style={{
-              display: 'flex',
-              gap: '10px',
-              marginBottom: '20px'
-            }}>
+            <div style={{ fontSize: '70px', animation: 'bounce 0.5s infinite' }}>🎉</div>
+            <WhiskersCat mood="celebrating" size={180} isTalking={isSpeaking} />
+            <h1 style={{ fontSize: '30px', color: '#FF8B5E', margin: '16px 0' }}>Amazing Job!</h1>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
               {[1, 2, 3].map(i => (
-                <span
-                  key={i}
-                  style={{
-                    fontSize: '48px',
-                    animation: `sparkle 0.5s ease-out ${i * 0.2}s`
-                  }}
-                >
-                  ⭐
-                </span>
+                <span key={i} style={{ fontSize: '44px', animation: `sparkle 0.5s ease-out ${i * 0.2}s` }}>⭐</span>
               ))}
             </div>
-            <p style={{ fontSize: '22px', color: '#5D4E4E' }}>
-              You earned 3 stars! 🌟
-            </p>
+            <p style={{ fontSize: '20px', color: '#5D4E4E' }}>You earned 3 stars!</p>
           </div>
         );
       }
@@ -1196,134 +1285,108 @@ Rules:
           display: 'flex',
           flexDirection: 'column'
         }}>
-          {/* Header */}
           <div style={{
-            padding: '16px 24px',
+            padding: '14px 20px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             borderBottom: '2px solid #FFE4D6'
           }}>
-            <button
-              onClick={onBack}
-              style={{
-                background: '#FFE4D6',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '10px 16px',
-                fontSize: '16px',
-                cursor: 'pointer',
-                color: '#FF8B5E'
-              }}
-            >
-              ← Back
-            </button>
+            <button onClick={onBack} style={{
+              background: '#FFE4D6',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '8px 14px',
+              fontSize: '15px',
+              cursor: 'pointer',
+              color: '#FF8B5E'
+            }}>← Back</button>
             
-            {/* Progress dots */}
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '200px' }}>
+            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '180px' }}>
               {steps.map((_, i) => (
-                <div
-                  key={i}
-                  style={{
-                    width: i === currentStep ? '20px' : '10px',
-                    height: '10px',
-                    borderRadius: '5px',
-                    background: i <= currentStep ? '#FF8B5E' : '#FFE4D6',
-                    transition: 'all 0.3s'
-                  }}
-                />
+                <div key={i} style={{
+                  width: i === currentStep ? '18px' : '9px',
+                  height: '9px',
+                  borderRadius: '5px',
+                  background: i <= currentStep ? '#FF8B5E' : '#FFE4D6',
+                  transition: 'all 0.3s'
+                }} />
               ))}
             </div>
             
             <div style={{
               background: '#FFE4D6',
-              borderRadius: '12px',
-              padding: '8px 14px',
-              fontSize: '14px',
+              borderRadius: '10px',
+              padding: '6px 12px',
+              fontSize: '13px',
               color: '#FF8B5E'
-            }}>
-              {data.lesson.subject}
-            </div>
+            }}>{data.lesson.subject}</div>
           </div>
           
-          {/* Content */}
           <div style={{
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '24px',
-            gap: '16px',
+            padding: '20px',
+            gap: '14px',
             overflow: 'auto'
           }}>
             <SpeechBubble text={step.text} key={currentStep} />
             
             <WhiskersCat 
               mood={step.type === 'celebrate' ? 'celebrating' : step.type === 'think' ? 'thinking' : 'happy'} 
-              size={160} 
+              size={150} 
               isTalking={isSpeaking} 
             />
             
-            {/* Visual emoji display */}
             {step.emoji && (
               <div style={{
-                fontSize: '42px',
-                padding: '16px 24px',
+                fontSize: '40px',
+                padding: '14px 22px',
                 background: 'rgba(255,255,255,0.9)',
-                borderRadius: '20px',
+                borderRadius: '18px',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
                 animation: 'float 2s ease-in-out infinite',
-                letterSpacing: '4px',
+                letterSpacing: '3px',
                 textAlign: 'center',
-                maxWidth: '300px',
-                wordBreak: 'break-all'
+                maxWidth: '280px'
               }}>
                 {step.emoji}
               </div>
             )}
           </div>
           
-          {/* Navigation */}
           <div style={{
-            padding: '20px 24px',
+            padding: '16px 20px',
             display: 'flex',
-            justifyContent: 'space-between',
-            gap: '16px',
+            gap: '14px',
             borderTop: '2px solid #FFE4D6'
           }}>
-            <button
-              onClick={prevStep}
-              disabled={currentStep === 0}
-              style={{
-                flex: 1,
-                background: currentStep === 0 ? '#EEE' : '#FFE4D6',
-                border: 'none',
-                borderRadius: '20px',
-                padding: '18px',
-                fontSize: '18px',
-                cursor: currentStep === 0 ? 'not-allowed' : 'pointer',
-                color: currentStep === 0 ? '#AAA' : '#FF8B5E'
-              }}
-            >
-              ← Back
-            </button>
+            <button onClick={prevStep} disabled={currentStep === 0} style={{
+              flex: 1,
+              background: currentStep === 0 ? '#EEE' : '#FFE4D6',
+              border: 'none',
+              borderRadius: '18px',
+              padding: '16px',
+              fontSize: '17px',
+              cursor: currentStep === 0 ? 'not-allowed' : 'pointer',
+              color: currentStep === 0 ? '#AAA' : '#FF8B5E'
+            }}>← Back</button>
             
-            <button
-              onClick={nextStep}
-              style={{
-                flex: 2,
-                background: 'linear-gradient(135deg, #FF8B5E, #FF7043)',
-                border: 'none',
-                borderRadius: '20px',
-                padding: '18px',
-                fontSize: '20px',
-                cursor: 'pointer',
-                color: 'white',
-                fontWeight: 'bold',
-                boxShadow: '0 4px 16px rgba(255,139,94,0.4)'
-              }}
-            >
+            <button onClick={nextStep} style={{
+              flex: 2,
+              background: 'linear-gradient(135deg, #FF8B5E, #FF7043)',
+              border: 'none',
+              borderRadius: '18px',
+              padding: '16px',
+              fontSize: '18px',
+              cursor: 'pointer',
+              color: 'white',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 16px rgba(255,139,94,0.4)'
+            }}>
               {currentStep === steps.length - 1 ? '🎉 Finish!' : 'Next →'}
             </button>
           </div>
@@ -1331,20 +1394,35 @@ Rules:
       );
     };
 
-    // ============== PROFILE SCREEN ==============
-    const ProfileScreen = ({ profile, setProfile, stars, streak, onBack }) => {
+    // ============== SETTINGS SCREEN ==============
+    const SettingsScreen = ({ profile, setProfile, stars, streak, onBack }) => {
+      const { settings, updateSettings } = useSettings();
       const [name, setName] = useState(profile.name || '');
-      const [apiKey, setApiKey] = useState(CONFIG.ANTHROPIC_API_KEY || '');
-      const [showApiInput, setShowApiInput] = useState(false);
+      const [openaiKey, setOpenaiKey] = useState(settings.openaiKey || '');
+      const [elevenlabsKey, setElevenlabsKey] = useState(settings.elevenlabsKey || '');
+      const [showAdvanced, setShowAdvanced] = useState(false);
+      const { speak } = useTextToSpeech();
       
-      const saveName = () => {
-        setProfile({ ...profile, name: name });
+      const saveName = () => setProfile({ ...profile, name: name });
+      
+      const saveOpenAI = () => {
+        updateSettings({ 
+          openaiKey: openaiKey,
+          useDemoMode: !openaiKey 
+        });
+        alert(openaiKey ? '✅ ChatGPT enabled!' : 'Demo mode enabled');
       };
       
-      const saveApiKey = () => {
-        CONFIG.ANTHROPIC_API_KEY = apiKey;
-        CONFIG.USE_DEMO_MODE = !apiKey;
-        alert(apiKey ? 'API key saved! AI mode enabled.' : 'API key cleared. Demo mode enabled.');
+      const saveElevenLabs = () => {
+        updateSettings({ 
+          elevenlabsKey: elevenlabsKey,
+          useElevenlabs: !!elevenlabsKey 
+        });
+        alert(elevenlabsKey ? '✅ ElevenLabs voice enabled!' : 'Browser voice enabled');
+      };
+      
+      const testVoice = () => {
+        speak("Hello! I'm Whiskers, your learning friend! Let's have fun together!");
       };
       
       return (
@@ -1356,192 +1434,154 @@ Rules:
           flexDirection: 'column',
           overflow: 'auto'
         }}>
-          {/* Header */}
           <div style={{
-            padding: '16px 24px',
+            padding: '14px 20px',
             display: 'flex',
             alignItems: 'center',
-            gap: '16px',
+            gap: '14px',
             borderBottom: '2px solid #FFE4D6'
           }}>
-            <button
-              onClick={onBack}
-              style={{
-                background: '#FFE4D6',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '10px 16px',
-                fontSize: '16px',
-                cursor: 'pointer',
-                color: '#FF8B5E'
-              }}
-            >
-              ← Back
-            </button>
-            <h1 style={{ fontSize: '24px', color: '#5D4E4E' }}>My Profile</h1>
+            <button onClick={onBack} style={{
+              background: '#FFE4D6',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '8px 14px',
+              fontSize: '15px',
+              cursor: 'pointer',
+              color: '#FF8B5E'
+            }}>← Back</button>
+            <h1 style={{ fontSize: '22px', color: '#5D4E4E' }}>Settings</h1>
           </div>
           
-          <div style={{
-            flex: 1,
-            padding: '24px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '20px'
-          }}>
-            <WhiskersCat mood="happy" size={130} />
+          <div style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+            <WhiskersCat mood="happy" size={100} />
             
-            {/* Name input */}
-            <div style={{
-              background: 'white',
-              borderRadius: '20px',
-              padding: '20px',
-              width: '100%',
-              maxWidth: '400px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
-            }}>
-              <label style={{
-                display: 'block',
-                fontSize: '16px',
-                color: '#888',
-                marginBottom: '8px'
-              }}>
-                What's your name?
-              </label>
+            {/* Name */}
+            <div style={{ background: 'white', borderRadius: '16px', padding: '16px', width: '100%', maxWidth: '380px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+              <label style={{ display: 'block', fontSize: '14px', color: '#888', marginBottom: '6px' }}>Child's Name</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onBlur={saveName}
-                placeholder="Enter your name"
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  fontSize: '20px',
-                  border: '2px solid #FFE4D6',
-                  borderRadius: '12px',
-                  outline: 'none'
-                }}
+                placeholder="Enter name"
+                style={{ width: '100%', padding: '12px', fontSize: '18px', border: '2px solid #FFE4D6', borderRadius: '10px', outline: 'none' }}
               />
             </div>
             
             {/* Stats */}
-            <div style={{
-              display: 'flex',
-              gap: '16px',
-              width: '100%',
-              maxWidth: '400px'
-            }}>
-              <div style={{
-                flex: 1,
-                background: 'rgba(255,213,79,0.2)',
-                borderRadius: '20px',
-                padding: '16px',
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: '36px' }}>⭐</div>
-                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#FFB300' }}>{stars}</div>
-                <div style={{ color: '#888', fontSize: '14px' }}>Total Stars</div>
+            <div style={{ display: 'flex', gap: '12px', width: '100%', maxWidth: '380px' }}>
+              <div style={{ flex: 1, background: 'rgba(255,213,79,0.2)', borderRadius: '16px', padding: '14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '32px' }}>⭐</div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#FFB300' }}>{stars}</div>
+                <div style={{ color: '#888', fontSize: '12px' }}>Stars</div>
               </div>
-              <div style={{
-                flex: 1,
-                background: 'rgba(255,139,94,0.2)',
-                borderRadius: '20px',
-                padding: '16px',
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: '36px' }}>🔥</div>
-                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#FF8B5E' }}>{streak}</div>
-                <div style={{ color: '#888', fontSize: '14px' }}>Day Streak</div>
+              <div style={{ flex: 1, background: 'rgba(255,139,94,0.2)', borderRadius: '16px', padding: '14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '32px' }}>🔥</div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#FF8B5E' }}>{streak}</div>
+                <div style={{ color: '#888', fontSize: '12px' }}>Streak</div>
               </div>
             </div>
             
-            {/* API Key section */}
-            <div style={{
-              background: 'white',
-              borderRadius: '20px',
-              padding: '20px',
-              width: '100%',
-              maxWidth: '400px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+            {/* Voice Test */}
+            <button onClick={testVoice} style={{
+              background: 'linear-gradient(135deg, #9C27B0, #7B1FA2)',
+              border: 'none',
+              borderRadius: '16px',
+              padding: '14px 28px',
+              color: 'white',
+              fontSize: '16px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: '0 4px 12px rgba(156,39,176,0.3)'
             }}>
-              <div 
-                onClick={() => setShowApiInput(!showApiInput)}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  cursor: 'pointer'
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: '16px', fontWeight: '500', color: '#5D4E4E' }}>
-                    🤖 AI Settings
+              🎙️ Test Voice
+            </button>
+            
+            {/* Advanced Settings Toggle */}
+            <button 
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              style={{
+                background: 'transparent',
+                border: '2px solid #DDD',
+                borderRadius: '12px',
+                padding: '10px 20px',
+                color: '#666',
+                fontSize: '14px',
+                cursor: 'pointer'
+              }}
+            >
+              {showAdvanced ? '▼ Hide API Settings' : '▶ Show API Settings'}
+            </button>
+            
+            {showAdvanced && (
+              <>
+                {/* ChatGPT API */}
+                <div style={{ background: 'white', borderRadius: '16px', padding: '16px', width: '100%', maxWidth: '380px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '20px' }}>🤖</span>
+                    <span style={{ fontWeight: '500', color: '#5D4E4E' }}>ChatGPT (for AI lessons)</span>
                   </div>
-                  <div style={{ fontSize: '14px', color: '#888' }}>
-                    {CONFIG.USE_DEMO_MODE ? 'Demo mode (no API key)' : 'AI mode enabled ✓'}
-                  </div>
-                </div>
-                <span style={{ fontSize: '20px' }}>{showApiInput ? '▼' : '▶'}</span>
-              </div>
-              
-              {showApiInput && (
-                <div style={{ marginTop: '16px' }}>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '14px',
-                    color: '#888',
-                    marginBottom: '8px'
-                  }}>
-                    Claude API Key (from console.anthropic.com)
-                  </label>
                   <input
                     type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-ant-..."
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      fontSize: '14px',
-                      border: '2px solid #FFE4D6',
-                      borderRadius: '12px',
-                      outline: 'none',
-                      marginBottom: '12px'
-                    }}
+                    value={openaiKey}
+                    onChange={(e) => setOpenaiKey(e.target.value)}
+                    placeholder="sk-..."
+                    style={{ width: '100%', padding: '10px', fontSize: '14px', border: '2px solid #E3F2FD', borderRadius: '8px', outline: 'none', marginBottom: '10px' }}
                   />
-                  <button
-                    onClick={saveApiKey}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      background: '#4CAF50',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      fontSize: '16px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Save API Key
-                  </button>
-                  <p style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
-                    Get your API key from console.anthropic.com. This enables real AI-powered lessons!
+                  <button onClick={saveOpenAI} style={{
+                    width: '100%',
+                    padding: '10px',
+                    background: '#4CAF50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}>Save ChatGPT Key</button>
+                  <p style={{ fontSize: '11px', color: '#888', marginTop: '6px' }}>
+                    Get from platform.openai.com → API Keys
                   </p>
                 </div>
-              )}
-            </div>
+                
+                {/* ElevenLabs API */}
+                <div style={{ background: 'white', borderRadius: '16px', padding: '16px', width: '100%', maxWidth: '380px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '20px' }}>🎙️</span>
+                    <span style={{ fontWeight: '500', color: '#5D4E4E' }}>ElevenLabs (realistic voice)</span>
+                  </div>
+                  <input
+                    type="password"
+                    value={elevenlabsKey}
+                    onChange={(e) => setElevenlabsKey(e.target.value)}
+                    placeholder="Enter API key"
+                    style={{ width: '100%', padding: '10px', fontSize: '14px', border: '2px solid #F3E5F5', borderRadius: '8px', outline: 'none', marginBottom: '10px' }}
+                  />
+                  <button onClick={saveElevenLabs} style={{
+                    width: '100%',
+                    padding: '10px',
+                    background: '#9C27B0',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    cursor: 'pointer'
+                  }}>Save ElevenLabs Key</button>
+                  <p style={{ fontSize: '11px', color: '#888', marginTop: '6px' }}>
+                    Get from elevenlabs.io → Profile → API Key (free tier: 10,000 chars/month)
+                  </p>
+                </div>
+              </>
+            )}
             
-            {/* Info */}
-            <div style={{
-              background: 'rgba(129,199,132,0.2)',
-              borderRadius: '16px',
-              padding: '16px 20px',
-              maxWidth: '400px'
-            }}>
-              <p style={{ fontSize: '15px', color: '#5D4E4E', lineHeight: 1.6 }}>
-                🌟 Keep learning every day to build your streak!<br/>
-                📸 Scan homework to earn stars!
+            {/* Current Status */}
+            <div style={{ background: 'rgba(129,199,132,0.2)', borderRadius: '12px', padding: '14px 18px', maxWidth: '380px', width: '100%' }}>
+              <p style={{ fontSize: '14px', color: '#5D4E4E', lineHeight: 1.5, margin: 0 }}>
+                <strong>Current Setup:</strong><br/>
+                🤖 AI: {settings.useDemoMode ? 'Demo mode' : 'ChatGPT'}<br/>
+                🎙️ Voice: {settings.useElevenlabs && settings.elevenlabsKey ? 'ElevenLabs' : 'Browser TTS'}
               </p>
             </div>
           </div>
@@ -1550,7 +1590,7 @@ Rules:
     };
 
     // ============== MAIN APP ==============
-    const App = () => {
+    const AppContent = () => {
       const [screen, setScreen] = useState('home');
       const [capturedImage, setCapturedImage] = useState(null);
       const [lessonData, setLessonData] = useState(null);
@@ -1558,9 +1598,7 @@ Rules:
       const [stars, setStars] = useLocalStorage('whiskers_stars', 0);
       const [streak, setStreak] = useLocalStorage('whiskers_streak', 1);
       
-      const addStars = (count) => {
-        setStars(stars + count);
-      };
+      const addStars = (count) => setStars(stars + count);
       
       return (
         <div style={{ width: '100%', height: '100vh', overflow: 'hidden' }}>
@@ -1570,16 +1608,13 @@ Rules:
               stars={stars}
               streak={streak}
               onScan={() => setScreen('camera')}
-              onProfile={() => setScreen('profile')}
+              onProfile={() => setScreen('settings')}
             />
           )}
           
           {screen === 'camera' && (
             <CameraScreen
-              onCapture={(image) => {
-                setCapturedImage(image);
-                setScreen('scanning');
-              }}
+              onCapture={(image) => { setCapturedImage(image); setScreen('scanning'); }}
               onBack={() => setScreen('home')}
             />
           )}
@@ -1587,10 +1622,7 @@ Rules:
           {screen === 'scanning' && (
             <ScanningScreen
               image={capturedImage}
-              onComplete={(data) => {
-                setLessonData(data);
-                setScreen('lesson');
-              }}
+              onComplete={(data) => { setLessonData(data); setScreen('lesson'); }}
               onBack={() => setScreen('camera')}
             />
           )}
@@ -1598,18 +1630,14 @@ Rules:
           {screen === 'lesson' && lessonData && (
             <LessonScreen
               data={lessonData}
-              onComplete={() => {
-                setLessonData(null);
-                setCapturedImage(null);
-                setScreen('home');
-              }}
+              onComplete={() => { setLessonData(null); setCapturedImage(null); setScreen('home'); }}
               onBack={() => setScreen('home')}
               onAddStars={addStars}
             />
           )}
           
-          {screen === 'profile' && (
-            <ProfileScreen
+          {screen === 'settings' && (
+            <SettingsScreen
               profile={profile}
               setProfile={setProfile}
               stars={stars}
@@ -1621,7 +1649,12 @@ Rules:
       );
     };
 
-    // Render the app
+    const App = () => (
+      <SettingsProvider>
+        <AppContent />
+      </SettingsProvider>
+    );
+
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
