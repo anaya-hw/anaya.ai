@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Whiskers">
+  <meta name="theme-color" content="#FF8B5E">
+  <title>Whiskers Learning Companion</title>
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐱</text></svg>">
+  <link rel="manifest" href="manifest.json">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { 
+      width: 100%; 
+      height: 100%; 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+      touch-action: manipulation;
+    }
+    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+    @keyframes sparkle { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.7; transform: scale(1.2); } }
+    @keyframes bounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+    @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,139,94,0.4); } 50% { box-shadow: 0 0 0 15px rgba(255,139,94,0); } }
+    .loading-spinner {
+      width: 50px; height: 50px;
+      border: 4px solid #FFE4D6;
+      border-top-color: #FF8B5E;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ============== CONFIGURATION ==============
+    const CONFIG = {
+      // Set your Claude API key here (or leave empty to use demo mode)
+      ANTHROPIC_API_KEY: '',
+      USE_DEMO_MODE: true // Set to false when you add your API key
+    };
+
+    // ============== ANIMATED CAT COMPONENT ==============
+    const WhiskersCat = ({ mood = 'happy', size = 200, isTalking = false }) => {
+      const [blinkOpen, setBlinkOpen] = useState(true);
+      const [tailAngle, setTailAngle] = useState(0);
+      const [breathScale, setBreathScale] = useState(1);
+      const [mouthOpen, setMouthOpen] = useState(false);
+      const [bounceY, setBounceY] = useState(0);
+      
+      useEffect(() => {
+        const blinkInterval = setInterval(() => {
+          setBlinkOpen(false);
+          setTimeout(() => setBlinkOpen(true), 150);
+        }, 3000 + Math.random() * 2000);
+        return () => clearInterval(blinkInterval);
+      }, []);
+      
+      useEffect(() => {
+        let frame = 0;
+        const tailInterval = setInterval(() => {
+          frame += 0.12;
+          setTailAngle(Math.sin(frame) * 18);
+        }, 50);
+        return () => clearInterval(tailInterval);
+      }, []);
+      
+      useEffect(() => {
+        let frame = 0;
+        const breathInterval = setInterval(() => {
+          frame += 0.06;
+          setBreathScale(1 + Math.sin(frame) * 0.025);
+        }, 50);
+        return () => clearInterval(breathInterval);
+      }, []);
+      
+      useEffect(() => {
+        if (isTalking) {
+          const talkInterval = setInterval(() => setMouthOpen(prev => !prev), 120);
+          return () => clearInterval(talkInterval);
+        }
+        setMouthOpen(false);
+      }, [isTalking]);
+      
+      useEffect(() => {
+        if (mood === 'excited' || mood === 'celebrating') {
+          let frame = 0;
+          const bounceInterval = setInterval(() => {
+            frame += 0.25;
+            setBounceY(Math.abs(Math.sin(frame)) * 12);
+          }, 50);
+          return () => clearInterval(bounceInterval);
+        }
+        setBounceY(0);
+      }, [mood]);
+      
+      const catOrange = '#FF9B5E';
+      const catCream = '#FFF5E6';
+      const catStripe = '#E8855A';
+      const noseColor = '#FFB5B5';
+      
+      const renderEyes = () => {
+        const eyeY = 55;
+        const leftEyeX = 70;
+        const rightEyeX = 130;
+        
+        if (!blinkOpen) {
+          return (
+            <>
+              <path d={`M ${leftEyeX - 12} ${eyeY} Q ${leftEyeX} ${eyeY + 8} ${leftEyeX + 12} ${eyeY}`} 
+                    stroke="#333" strokeWidth="3" fill="none" strokeLinecap="round"/>
+              <path d={`M ${rightEyeX - 12} ${eyeY} Q ${rightEyeX} ${eyeY + 8} ${rightEyeX + 12} ${eyeY}`} 
+                    stroke="#333" strokeWidth="3" fill="none" strokeLinecap="round"/>
+            </>
+          );
+        }
+        
+        if (mood === 'happy' || mood === 'celebrating') {
+          return (
+            <>
+              <path d={`M ${leftEyeX - 12} ${eyeY + 5} Q ${leftEyeX} ${eyeY - 12} ${leftEyeX + 12} ${eyeY + 5}`} 
+                    stroke="#333" strokeWidth="4" fill="none" strokeLinecap="round"/>
+              <path d={`M ${rightEyeX - 12} ${eyeY + 5} Q ${rightEyeX} ${eyeY - 12} ${rightEyeX + 12} ${eyeY + 5}`} 
+                    stroke="#333" strokeWidth="4" fill="none" strokeLinecap="round"/>
+            </>
+          );
+        }
+        
+        if (mood === 'excited') {
+          return (
+            <>
+              <circle cx={leftEyeX} cy={eyeY} r="14" fill="#333"/>
+              <circle cx={leftEyeX - 3} cy={eyeY - 4} r="5" fill="white"/>
+              <circle cx={leftEyeX + 5} cy={eyeY + 3} r="3" fill="white"/>
+              <circle cx={rightEyeX} cy={eyeY} r="14" fill="#333"/>
+              <circle cx={rightEyeX - 3} cy={eyeY - 4} r="5" fill="white"/>
+              <circle cx={rightEyeX + 5} cy={eyeY + 3} r="3" fill="white"/>
+            </>
+          );
+        }
+        
+        if (mood === 'thinking') {
+          return (
+            <>
+              <ellipse cx={leftEyeX} cy={eyeY - 3} rx="10" ry="12" fill="white"/>
+              <ellipse cx={leftEyeX + 4} cy={eyeY - 3} rx="6" ry="8" fill="#333"/>
+              <circle cx={leftEyeX + 2} cy={eyeY - 5} r="2" fill="white"/>
+              <ellipse cx={rightEyeX} cy={eyeY - 3} rx="10" ry="12" fill="white"/>
+              <ellipse cx={rightEyeX + 4} cy={eyeY - 3} rx="6" ry="8" fill="#333"/>
+              <circle cx={rightEyeX + 2} cy={eyeY - 5} r="2" fill="white"/>
+            </>
+          );
+        }
+        
+        return (
+          <>
+            <ellipse cx={leftEyeX} cy={eyeY} rx="12" ry="14" fill="white"/>
+            <ellipse cx={leftEyeX + 2} cy={eyeY} rx="8" ry="10" fill="#333"/>
+            <circle cx={leftEyeX - 1} cy={eyeY - 3} r="3" fill="white"/>
+            <ellipse cx={rightEyeX} cy={eyeY} rx="12" ry="14" fill="white"/>
+            <ellipse cx={rightEyeX + 2} cy={eyeY} rx="8" ry="10" fill="#333"/>
+            <circle cx={rightEyeX - 1} cy={eyeY - 3} r="3" fill="white"/>
+          </>
+        );
+      };
+      
+      return (
+        <svg 
+          width={size} 
+          height={size} 
+          viewBox="0 0 200 200"
+          style={{ 
+            transform: `translateY(${-bounceY}px) scale(${breathScale})`,
+            transition: 'transform 0.1s ease-out'
+          }}
+        >
+          {mood === 'celebrating' && (
+            <circle cx="100" cy="110" r="90" fill="url(#glowGradient)" opacity="0.6"/>
+          )}
+          
+          <defs>
+            <radialGradient id="glowGradient">
+              <stop offset="0%" stopColor="#FFE566" stopOpacity="0.9"/>
+              <stop offset="100%" stopColor="#FFE566" stopOpacity="0"/>
+            </radialGradient>
+          </defs>
+          
+          <g transform={`rotate(${tailAngle}, 150, 160)`}>
+            <path d="M 145 155 Q 180 140 185 100 Q 190 80 175 70" 
+                  stroke={catOrange} strokeWidth="18" fill="none" strokeLinecap="round"/>
+            <path d="M 175 75 Q 172 68 178 65" 
+                  stroke={catStripe} strokeWidth="6" fill="none" strokeLinecap="round"/>
+          </g>
+          
+          <ellipse cx="100" cy="150" rx="55" ry="40" fill={catOrange}/>
+          <ellipse cx="100" cy="155" rx="40" ry="28" fill={catCream}/>
+          <ellipse cx="100" cy="75" rx="55" ry="50" fill={catOrange}/>
+          
+          <polygon points="45,45 55,0 80,35" fill={catOrange}/>
+          <polygon points="55,35 60,15 72,32" fill={noseColor}/>
+          <polygon points="155,45 145,0 120,35" fill={catOrange}/>
+          <polygon points="145,35 140,15 128,32" fill={noseColor}/>
+          
+          <path d="M 85 25 Q 100 35 115 25" stroke={catStripe} strokeWidth="4" fill="none" strokeLinecap="round"/>
+          <path d="M 90 35 Q 100 42 110 35" stroke={catStripe} strokeWidth="3" fill="none" strokeLinecap="round"/>
+          
+          <ellipse cx="100" cy="85" rx="35" ry="30" fill={catCream}/>
+          {renderEyes()}
+          <ellipse cx="100" cy="78" rx="8" ry="6" fill={noseColor}/>
+          
+          <path d={`M 100 84 L 100 ${mouthOpen ? 98 : 92}`} stroke="#333" strokeWidth="2"/>
+          {mouthOpen ? (
+            <ellipse cx="100" cy="96" rx="12" ry="8" fill="#FF8888"/>
+          ) : (
+            <>
+              <path d="M 100 92 Q 88 100 82 95" stroke="#333" strokeWidth="2" fill="none"/>
+              <path d="M 100 92 Q 112 100 118 95" stroke="#333" strokeWidth="2" fill="none"/>
+            </>
+          )}
+          
+          <line x1="45" y1="75" x2="20" y2="68" stroke="#333" strokeWidth="2"/>
+          <line x1="45" y1="82" x2="18" y2="82" stroke="#333" strokeWidth="2"/>
+          <line x1="45" y1="89" x2="20" y2="96" stroke="#333" strokeWidth="2"/>
+          <line x1="155" y1="75" x2="180" y2="68" stroke="#333" strokeWidth="2"/>
+          <line x1="155" y1="82" x2="182" y2="82" stroke="#333" strokeWidth="2"/>
+          <line x1="155" y1="89" x2="180" y2="96" stroke="#333" strokeWidth="2"/>
+          
+          <ellipse cx="62" cy="88" rx="10" ry="6" fill="#FFB5B5" opacity="0.5"/>
+          <ellipse cx="138" cy="88" rx="10" ry="6" fill="#FFB5B5" opacity="0.5"/>
+        </svg>
+      );
+    };
+
+    // ============== SPEECH BUBBLE ==============
+    const SpeechBubble = ({ text, instant = false }) => {
+      const [displayText, setDisplayText] = useState(instant ? text : '');
+      
+      useEffect(() => {
+        if (instant) {
+          setDisplayText(text);
+          return;
+        }
+        setDisplayText('');
+        let i = 0;
+        const interval = setInterval(() => {
+          if (i < text.length) {
+            setDisplayText(text.slice(0, i + 1));
+            i++;
+          } else {
+            clearInterval(interval);
+          }
+        }, 25);
+        return () => clearInterval(interval);
+      }, [text, instant]);
+      
+      return (
+        <div style={{
+          background: 'white',
+          borderRadius: '24px',
+          padding: '18px 24px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+          border: '3px solid #FFE4D6',
+          maxWidth: '320px',
+          position: 'relative',
+          animation: 'slideUp 0.3s ease-out'
+        }}>
+          <p style={{
+            fontSize: '20px',
+            color: '#5D4E4E',
+            margin: 0,
+            lineHeight: 1.5
+          }}>
+            {displayText}
+            {!instant && displayText.length < text.length && (
+              <span style={{ opacity: 0.5, animation: 'blink 0.8s infinite' }}>|</span>
+            )}
+          </p>
+          <div style={{
+            position: 'absolute',
+            bottom: '-12px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 0,
+            height: 0,
+            borderLeft: '12px solid transparent',
+            borderRight: '12px solid transparent',
+            borderTop: '12px solid white'
+          }}/>
+        </div>
+      );
+    };
+
+    // ============== TEXT TO SPEECH ==============
+    const useTextToSpeech = () => {
+      const [isSpeaking, setIsSpeaking] = useState(false);
+      
+      const speak = useCallback((text) => {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.rate = 0.85;
+          utterance.pitch = 1.1;
+          utterance.onstart = () => setIsSpeaking(true);
+          utterance.onend = () => setIsSpeaking(false);
+          utterance.onerror = () => setIsSpeaking(false);
+          window.speechSynthesis.speak(utterance);
+        }
+      }, []);
+      
+      const stop = useCallback(() => {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          setIsSpeaking(false);
+        }
+      }, []);
+      
+      return { speak, stop, isSpeaking };
+    };
+
+    // ============== LOCAL STORAGE ==============
+    const useLocalStorage = (key, initialValue) => {
+      const [value, setValue] = useState(() => {
+        try {
+          const item = localStorage.getItem(key);
+          return item ? JSON.parse(item) : initialValue;
+        } catch {
+          return initialValue;
+        }
+      });
+      
+      const setStoredValue = (newValue) => {
+        setValue(newValue);
+        try {
+          localStorage.setItem(key, JSON.stringify(newValue));
+        } catch (e) {
+          console.error('Failed to save to localStorage:', e);
+        }
+      };
+      
+      return [value, setStoredValue];
+    };
+
+    // ============== DEMO LESSONS ==============
+    const generateDemoLesson = (problemText) => {
+      const text = problemText.toLowerCase();
+      
+      // Math problems
+      if (text.match(/\d\s*[\+\-\×\÷\*\/]\s*\d/) || text.includes('add') || text.includes('plus') || text.includes('sum')) {
+        const match = problemText.match(/(\d+)\s*[\+\+]\s*(\d+)/);
+        if (match) {
+          const a = parseInt(match[1]);
+          const b = parseInt(match[2]);
+          const sum = a + b;
+          return {
+            subject: 'Math',
+            steps: [
+              { text: `Let's solve ${a} + ${b} together! 🎯`, emoji: '🧮', type: 'intro' },
+              { text: `First, let's count ${a} objects!`, emoji: '🍎'.repeat(Math.min(a, 10)), type: 'visual' },
+              { text: `Great! Now let's add ${b} more!`, emoji: '🍎'.repeat(Math.min(b, 10)), type: 'visual' },
+              { text: `Count them all together: 1, 2, 3...`, emoji: '👆', type: 'action' },
+              { text: `We have ${sum} in total!`, emoji: '🍎'.repeat(Math.min(sum, 10)), type: 'visual' },
+              { text: `${a} + ${b} = ${sum} ✨`, emoji: '🎉', type: 'answer' },
+              { text: `Amazing job! You're a math star! 🌟`, emoji: '⭐', type: 'celebrate' }
+            ]
+          };
+        }
+      }
+      
+      // Subtraction
+      if (text.match(/\d\s*[\-]\s*\d/) || text.includes('minus') || text.includes('subtract') || text.includes('take away')) {
+        const match = problemText.match(/(\d+)\s*[\-]\s*(\d+)/);
+        if (match) {
+          const a = parseInt(match[1]);
+          const b = parseInt(match[2]);
+          const diff = a - b;
+          return {
+            subject: 'Math',
+            steps: [
+              { text: `Let's solve ${a} - ${b} together! 🎯`, emoji: '🧮', type: 'intro' },
+              { text: `Start with ${a} cookies!`, emoji: '🍪'.repeat(Math.min(a, 10)), type: 'visual' },
+              { text: `Now take away ${b} cookies...`, emoji: '👋', type: 'action' },
+              { text: `How many are left?`, emoji: '🤔', type: 'think' },
+              { text: `We have ${diff} cookies left!`, emoji: '🍪'.repeat(Math.min(Math.max(diff, 0), 10)), type: 'visual' },
+              { text: `${a} - ${b} = ${diff} ✨`, emoji: '🎉', type: 'answer' },
+              { text: `You did it! Super work! 🌟`, emoji: '⭐', type: 'celebrate' }
+            ]
+          };
+        }
+      }
+      
+      // Reading/letters
+      if (text.match(/[a-z]/i) && text.length < 20 && !text.match(/\d/)) {
+        return {
+          subject: 'Reading',
+          steps: [
+            { text: `Let's read this word together! 📖`, emoji: '📚', type: 'intro' },
+            { text: `The word is: "${problemText.trim()}"`, emoji: '👀', type: 'visual' },
+            { text: `Let's sound it out slowly...`, emoji: '🗣️', type: 'action' },
+            { text: `Great job sounding it out!`, emoji: '👏', type: 'celebrate' },
+            { text: `Now let's say it together!`, emoji: '🎤', type: 'action' },
+            { text: `Wonderful reading! 🌟`, emoji: '⭐', type: 'celebrate' }
+          ]
+        };
+      }
+      
+      // Default generic lesson
+      return {
+        subject: 'Learning',
+        steps: [
+          { text: `Let's work on this together! 🎯`, emoji: '📝', type: 'intro' },
+          { text: `Here's what I see: "${problemText.slice(0, 50)}..."`, emoji: '👀', type: 'visual' },
+          { text: `Let's break this down step by step!`, emoji: '🔍', type: 'action' },
+          { text: `Think about what we need to find...`, emoji: '🤔', type: 'think' },
+          { text: `You're doing great! Keep going!`, emoji: '💪', type: 'encourage' },
+          { text: `Excellent work on this! 🌟`, emoji: '⭐', type: 'celebrate' }
+        ]
+      };
+    };
+
+    // ============== AI LESSON GENERATION ==============
+    const generateAiLesson = async (problemText) => {
+      if (CONFIG.USE_DEMO_MODE || !CONFIG.ANTHROPIC_API_KEY) {
+        return generateDemoLesson(problemText);
+      }
+      
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': CONFIG.ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1024,
+            messages: [{
+              role: 'user',
+              content: `You are a friendly cat teacher helping a kindergartener (age 5-6) with homework. 
+              
+The student needs help with: "${problemText}"
+
+Create a simple, encouraging lesson. Respond ONLY with valid JSON in this exact format:
+{
+  "subject": "Math" or "Reading" or "Science",
+  "steps": [
+    {"text": "step explanation", "emoji": "relevant emoji(s)", "type": "intro|visual|action|think|answer|celebrate"}
+  ]
+}
+
+Rules:
+- Use 5-7 simple steps
+- Each step should be ONE short sentence (under 15 words)
+- Use lots of emojis to visualize concepts
+- Be very encouraging and patient
+- For math: use counting objects (apples, cookies, stars)
+- For reading: break down sounds and letters
+- End with celebration!`
+            }]
+          })
+        });
+        
+        const data = await response.json();
+        const content = data.content[0].text;
+        return JSON.parse(content);
+      } catch (error) {
+        console.error('AI lesson error:', error);
+        return generateDemoLesson(problemText);
+      }
+    };
+
+    // ============== HOME SCREEN ==============
+    const HomeScreen = ({ profile, stars, streak, onScan, onProfile }) => {
+      const [dialogue, setDialogue] = useState("Hi there, friend! 🌟 Ready to learn something amazing today?");
+      const [catMood, setCatMood] = useState('happy');
+      const { speak, isSpeaking } = useTextToSpeech();
+      
+      const greetings = [
+        "Hi there, friend! 🌟 Ready to learn something amazing today?",
+        "Yay, you're here! Let's have fun learning! 🎉",
+        "Hello, superstar! What should we explore? ⭐",
+        "I'm so happy to see you! 😺"
+      ];
+      
+      useEffect(() => {
+        const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+        setDialogue(greeting);
+        setTimeout(() => speak(greeting.replace(/[🌟🎉⭐😺]/g, '')), 500);
+      }, []);
+      
+      return (
+        <div style={{
+          width: '100%',
+          height: '100%',
+          background: 'linear-gradient(180deg, #FFF8F0 0%, #FFF5E8 50%, #FFF8F0 100%)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'auto'
+        }}>
+          {/* Header */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '16px 24px'
+          }}>
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <div style={{
+                background: 'rgba(255,213,79,0.2)',
+                borderRadius: '16px',
+                padding: '10px 18px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{ fontSize: '24px', animation: 'sparkle 2s infinite' }}>⭐</span>
+                <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#FFB300' }}>{stars}</span>
+              </div>
+              <div style={{
+                background: 'rgba(255,139,94,0.2)',
+                borderRadius: '16px',
+                padding: '10px 18px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{ fontSize: '24px' }}>🔥</span>
+                <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#FF8B5E' }}>{streak}</span>
+              </div>
+            </div>
+            <button
+              onClick={onProfile}
+              style={{
+                background: 'white',
+                border: '2px solid #FFE4D6',
+                borderRadius: '50%',
+                width: '50px',
+                height: '50px',
+                fontSize: '24px',
+                cursor: 'pointer'
+              }}
+            >
+              👤
+            </button>
+          </div>
+          
+          {/* Main content */}
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            gap: '16px'
+          }}>
+            <SpeechBubble text={dialogue} />
+            
+            <WhiskersCat mood={catMood} size={220} isTalking={isSpeaking} />
+            
+            {profile.name && (
+              <div style={{
+                background: 'rgba(255,139,94,0.1)',
+                borderRadius: '20px',
+                padding: '12px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <span style={{ fontSize: '28px' }}>🐱</span>
+                <span style={{ fontSize: '22px', color: '#FF8B5E', fontWeight: '600' }}>
+                  Hi, {profile.name}!
+                </span>
+              </div>
+            )}
+            
+            {/* Scan button */}
+            <button
+              onClick={() => {
+                setCatMood('excited');
+                setDialogue("Ooh! Let me see your homework! 📸");
+                speak("Ooh! Let me see your homework!");
+                setTimeout(onScan, 1500);
+              }}
+              style={{
+                background: 'linear-gradient(135deg, #FF8B5E 0%, #FF7043 100%)',
+                border: 'none',
+                borderRadius: '28px',
+                padding: '24px 48px',
+                marginTop: '20px',
+                cursor: 'pointer',
+                boxShadow: '0 8px 32px rgba(255,139,94,0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                animation: 'pulse 2s infinite'
+              }}
+            >
+              <span style={{ fontSize: '42px' }}>📸</span>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '24px', color: 'white', fontWeight: 'bold' }}>
+                  Scan Homework
+                </div>
+                <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.85)' }}>
+                  Take a photo of your worksheet
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    // ============== CAMERA SCREEN ==============
+    const CameraScreen = ({ onCapture, onBack }) => {
+      const videoRef = useRef(null);
+      const canvasRef = useRef(null);
+      const [hasCamera, setHasCamera] = useState(true);
+      const [stream, setStream] = useState(null);
+      const [cameraReady, setCameraReady] = useState(false);
+      
+      useEffect(() => {
+        const startCamera = async () => {
+          try {
+            const mediaStream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+            });
+            if (videoRef.current) {
+              videoRef.current.srcObject = mediaStream;
+              setStream(mediaStream);
+              setCameraReady(true);
+            }
+          } catch (err) {
+            console.error('Camera error:', err);
+            setHasCamera(false);
+          }
+        };
+        
+        startCamera();
+        
+        return () => {
+          if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+          }
+        };
+      }, []);
+      
+      const capturePhoto = () => {
+        if (videoRef.current && canvasRef.current) {
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0);
+          const imageData = canvas.toDataURL('image/jpeg', 0.9);
+          
+          if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+          }
+          
+          onCapture(imageData);
+        }
+      };
+      
+      const handleFileUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            onCapture(event.target.result);
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      
+      return (
+        <div style={{
+          width: '100%',
+          height: '100%',
+          background: '#000',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: '16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: 'rgba(0,0,0,0.5)',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10
+          }}>
+            <button
+              onClick={onBack}
+              style={{
+                background: 'rgba(255,255,255,0.2)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '44px',
+                height: '44px',
+                fontSize: '24px',
+                color: 'white',
+                cursor: 'pointer'
+              }}
+            >
+              ←
+            </button>
+            <span style={{ color: 'white', fontSize: '18px', fontWeight: '500' }}>
+              📸 Point at your homework
+            </span>
+            <div style={{ width: '44px' }}></div>
+          </div>
+          
+          {/* Camera view */}
+          {hasCamera ? (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+            />
+          ) : (
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              padding: '20px'
+            }}>
+              <span style={{ fontSize: '60px', marginBottom: '20px' }}>📷</span>
+              <p style={{ fontSize: '18px', textAlign: 'center', marginBottom: '20px' }}>
+                Camera not available. Upload a photo instead!
+              </p>
+            </div>
+          )}
+          
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
+          
+          {/* Controls */}
+          <div style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: '30px',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '30px',
+            background: 'linear-gradient(transparent, rgba(0,0,0,0.8))'
+          }}>
+            {/* Upload button */}
+            <label style={{
+              background: 'rgba(255,255,255,0.2)',
+              border: '2px solid white',
+              borderRadius: '50%',
+              width: '56px',
+              height: '56px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '24px',
+              cursor: 'pointer'
+            }}>
+              📁
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                style={{ display: 'none' }}
+              />
+            </label>
+            
+            {/* Capture button */}
+            {hasCamera && cameraReady && (
+              <button
+                onClick={capturePhoto}
+                style={{
+                  background: 'white',
+                  border: '4px solid #FF8B5E',
+                  borderRadius: '50%',
+                  width: '80px',
+                  height: '80px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '36px'
+                }}
+              >
+                📷
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    // ============== SCANNING SCREEN ==============
+    const ScanningScreen = ({ image, onComplete, onBack }) => {
+      const [status, setStatus] = useState('Whiskers is looking at your homework...');
+      const [progress, setProgress] = useState(0);
+      const { speak, isSpeaking } = useTextToSpeech();
+      
+      useEffect(() => {
+        speak("Let me take a look at your homework!");
+        
+        const runOCR = async () => {
+          try {
+            setStatus('Reading the words and numbers... 📖');
+            setProgress(20);
+            
+            const worker = await Tesseract.createWorker('eng');
+            
+            setProgress(40);
+            setStatus('Almost there... 🔍');
+            
+            const { data: { text } } = await worker.recognize(image);
+            
+            setProgress(70);
+            setStatus('Thinking about how to help you... 🤔');
+            
+            await worker.terminate();
+            
+            setProgress(90);
+            
+            // Generate lesson
+            const lesson = await generateAiLesson(text || 'Help me learn');
+            
+            setProgress(100);
+            setStatus('Got it! Let me teach you! 🎉');
+            speak("Got it! Let me teach you!");
+            
+            setTimeout(() => {
+              onComplete({
+                originalText: text || 'No text detected',
+                lesson: lesson
+              });
+            }, 1500);
+            
+          } catch (error) {
+            console.error('OCR Error:', error);
+            setStatus('Hmm, let me try a different way...');
+            
+            // Fallback
+            const lesson = generateDemoLesson('math problem');
+            setTimeout(() => {
+              onComplete({
+                originalText: 'Could not read image clearly',
+                lesson: lesson
+              });
+            }, 1500);
+          }
+        };
+        
+        runOCR();
+      }, [image]);
+      
+      return (
+        <div style={{
+          width: '100%',
+          height: '100%',
+          background: 'linear-gradient(180deg, #FFF8F0 0%, #FFF5E8 100%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px'
+        }}>
+          <WhiskersCat mood="thinking" size={200} isTalking={isSpeaking} />
+          
+          <div style={{
+            marginTop: '24px',
+            textAlign: 'center'
+          }}>
+            <p style={{
+              fontSize: '24px',
+              color: '#5D4E4E',
+              marginBottom: '20px'
+            }}>
+              {status}
+            </p>
+            
+            {/* Progress bar */}
+            <div style={{
+              width: '280px',
+              height: '16px',
+              background: '#FFE4D6',
+              borderRadius: '8px',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                width: `${progress}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #FF8B5E, #FFB74D)',
+                borderRadius: '8px',
+                transition: 'width 0.5s ease-out'
+              }} />
+            </div>
+          </div>
+          
+          {/* Preview of captured image */}
+          <div style={{
+            marginTop: '24px',
+            width: '200px',
+            height: '150px',
+            borderRadius: '16px',
+            overflow: 'hidden',
+            border: '4px solid #FFE4D6',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+          }}>
+            <img
+              src={image}
+              alt="Captured homework"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+            />
+          </div>
+          
+          <button
+            onClick={onBack}
+            style={{
+              marginTop: '24px',
+              background: 'transparent',
+              border: '2px solid #FF8B5E',
+              borderRadius: '20px',
+              padding: '12px 24px',
+              color: '#FF8B5E',
+              fontSize: '16px',
+              cursor: 'pointer'
+            }}
+          >
+            ← Take another photo
+          </button>
+        </div>
+      );
+    };
+
+    // ============== LESSON SCREEN ==============
+    const LessonScreen = ({ data, onComplete, onBack, onAddStars }) => {
+      const [currentStep, setCurrentStep] = useState(0);
+      const [showCelebration, setShowCelebration] = useState(false);
+      const { speak, isSpeaking } = useTextToSpeech();
+      
+      const steps = data.lesson.steps;
+      const step = steps[currentStep];
+      
+      useEffect(() => {
+        if (step) {
+          speak(step.text.replace(/[🎯🧮🍎👆🎉⭐🤔💪📝👀🔍📖🗣️👏🎤🍪👋]/g, ''));
+        }
+      }, [currentStep]);
+      
+      const nextStep = () => {
+        if (currentStep < steps.length - 1) {
+          setCurrentStep(currentStep + 1);
+        } else {
+          // Lesson complete!
+          setShowCelebration(true);
+          speak("Amazing job! You earned 3 stars!");
+          onAddStars(3);
+          setTimeout(() => {
+            onComplete();
+          }, 3000);
+        }
+      };
+      
+      const prevStep = () => {
+        if (currentStep > 0) {
+          setCurrentStep(currentStep - 1);
+        }
+      };
+      
+      if (showCelebration) {
+        return (
+          <div style={{
+            width: '100%',
+            height: '100%',
+            background: 'linear-gradient(180deg, #FFF8F0 0%, #FFFDE7 100%)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <div style={{
+              fontSize: '80px',
+              animation: 'bounce 0.5s infinite'
+            }}>
+              🎉
+            </div>
+            <WhiskersCat mood="celebrating" size={220} isTalking={isSpeaking} />
+            <h1 style={{
+              fontSize: '32px',
+              color: '#FF8B5E',
+              margin: '20px 0'
+            }}>
+              Amazing Job!
+            </h1>
+            <div style={{
+              display: 'flex',
+              gap: '10px',
+              marginBottom: '20px'
+            }}>
+              {[1, 2, 3].map(i => (
+                <span
+                  key={i}
+                  style={{
+                    fontSize: '48px',
+                    animation: `sparkle 0.5s ease-out ${i * 0.2}s`
+                  }}
+                >
+                  ⭐
+                </span>
+              ))}
+            </div>
+            <p style={{ fontSize: '22px', color: '#5D4E4E' }}>
+              You earned 3 stars! 🌟
+            </p>
+          </div>
+        );
+      }
+      
+      return (
+        <div style={{
+          width: '100%',
+          height: '100%',
+          background: 'linear-gradient(180deg, #FFF8F0 0%, #FFF5E8 100%)',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: '16px 24px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderBottom: '2px solid #FFE4D6'
+          }}>
+            <button
+              onClick={onBack}
+              style={{
+                background: '#FFE4D6',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '10px 16px',
+                fontSize: '16px',
+                cursor: 'pointer',
+                color: '#FF8B5E'
+              }}
+            >
+              ← Back
+            </button>
+            
+            {/* Progress dots */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {steps.map((_, i) => (
+                <div
+                  key={i}
+                  style={{
+                    width: i === currentStep ? '24px' : '12px',
+                    height: '12px',
+                    borderRadius: '6px',
+                    background: i <= currentStep ? '#FF8B5E' : '#FFE4D6',
+                    transition: 'all 0.3s'
+                  }}
+                />
+              ))}
+            </div>
+            
+            <div style={{
+              background: '#FFE4D6',
+              borderRadius: '12px',
+              padding: '8px 14px',
+              fontSize: '14px',
+              color: '#FF8B5E'
+            }}>
+              {data.lesson.subject}
+            </div>
+          </div>
+          
+          {/* Content */}
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            gap: '20px'
+          }}>
+            <SpeechBubble text={step.text} key={currentStep} />
+            
+            <WhiskersCat 
+              mood={step.type === 'celebrate' ? 'celebrating' : step.type === 'think' ? 'thinking' : 'happy'} 
+              size={180} 
+              isTalking={isSpeaking} 
+            />
+            
+            {/* Visual emoji display */}
+            {step.emoji && (
+              <div style={{
+                fontSize: '48px',
+                padding: '20px',
+                background: 'rgba(255,255,255,0.8)',
+                borderRadius: '24px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                animation: 'float 2s ease-in-out infinite',
+                letterSpacing: '8px'
+              }}>
+                {step.emoji}
+              </div>
+            )}
+          </div>
+          
+          {/* Navigation */}
+          <div style={{
+            padding: '20px 24px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: '16px',
+            borderTop: '2px solid #FFE4D6'
+          }}>
+            <button
+              onClick={prevStep}
+              disabled={currentStep === 0}
+              style={{
+                flex: 1,
+                background: currentStep === 0 ? '#EEE' : '#FFE4D6',
+                border: 'none',
+                borderRadius: '20px',
+                padding: '18px',
+                fontSize: '20px',
+                cursor: currentStep === 0 ? 'not-allowed' : 'pointer',
+                color: currentStep === 0 ? '#AAA' : '#FF8B5E'
+              }}
+            >
+              ← Back
+            </button>
+            
+            <button
+              onClick={nextStep}
+              style={{
+                flex: 2,
+                background: 'linear-gradient(135deg, #FF8B5E, #FF7043)',
+                border: 'none',
+                borderRadius: '20px',
+                padding: '18px',
+                fontSize: '20px',
+                cursor: 'pointer',
+                color: 'white',
+                fontWeight: 'bold',
+                boxShadow: '0 4px 16px rgba(255,139,94,0.4)'
+              }}
+            >
+              {currentStep === steps.length - 1 ? '🎉 Finish!' : 'Next →'}
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    // ============== PROFILE SCREEN ==============
+    const ProfileScreen = ({ profile, setProfile, stars, streak, onBack }) => {
+      const [name, setName] = useState(profile.name || '');
+      
+      const saveName = () => {
+        setProfile({ ...profile, name: name });
+      };
+      
+      return (
+        <div style={{
+          width: '100%',
+          height: '100%',
+          background: 'linear-gradient(180deg, #FFF8F0 0%, #FFF5E8 100%)',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: '16px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            borderBottom: '2px solid #FFE4D6'
+          }}>
+            <button
+              onClick={onBack}
+              style={{
+                background: '#FFE4D6',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '10px 16px',
+                fontSize: '16px',
+                cursor: 'pointer',
+                color: '#FF8B5E'
+              }}
+            >
+              ← Back
+            </button>
+            <h1 style={{ fontSize: '24px', color: '#5D4E4E' }}>My Profile</h1>
+          </div>
+          
+          <div style={{
+            flex: 1,
+            padding: '24px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '24px'
+          }}>
+            <WhiskersCat mood="happy" size={150} />
+            
+            {/* Name input */}
+            <div style={{
+              background: 'white',
+              borderRadius: '20px',
+              padding: '20px',
+              width: '100%',
+              maxWidth: '400px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+            }}>
+              <label style={{
+                display: 'block',
+                fontSize: '16px',
+                color: '#888',
+                marginBottom: '8px'
+              }}>
+                What's your name?
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={saveName}
+                placeholder="Enter your name"
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  fontSize: '20px',
+                  border: '2px solid #FFE4D6',
+                  borderRadius: '12px',
+                  outline: 'none'
+                }}
+              />
+            </div>
+            
+            {/* Stats */}
+            <div style={{
+              display: 'flex',
+              gap: '20px',
+              width: '100%',
+              maxWidth: '400px'
+            }}>
+              <div style={{
+                flex: 1,
+                background: 'rgba(255,213,79,0.2)',
+                borderRadius: '20px',
+                padding: '20px',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '40px' }}>⭐</div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#FFB300' }}>{stars}</div>
+                <div style={{ color: '#888' }}>Total Stars</div>
+              </div>
+              <div style={{
+                flex: 1,
+                background: 'rgba(255,139,94,0.2)',
+                borderRadius: '20px',
+                padding: '20px',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '40px' }}>🔥</div>
+                <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#FF8B5E' }}>{streak}</div>
+                <div style={{ color: '#888' }}>Day Streak</div>
+              </div>
+            </div>
+            
+            {/* Info */}
+            <div style={{
+              background: 'rgba(129,199,132,0.2)',
+              borderRadius: '16px',
+              padding: '16px 20px',
+              maxWidth: '400px'
+            }}>
+              <p style={{ fontSize: '16px', color: '#5D4E4E', lineHeight: 1.6 }}>
+                🌟 Keep learning every day to build your streak!<br/>
+                📸 Scan homework to earn stars!
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ============== MAIN APP ==============
+    const App = () => {
+      const [screen, setScreen] = useState('home');
+      const [capturedImage, setCapturedImage] = useState(null);
+      const [lessonData, setLessonData] = useState(null);
+      const [profile, setProfile] = useLocalStorage('whiskers_profile', { name: '' });
+      const [stars, setStars] = useLocalStorage('whiskers_stars', 0);
+      const [streak, setStreak] = useLocalStorage('whiskers_streak', 1);
+      
+      const addStars = (count) => {
+        setStars(stars + count);
+      };
+      
+      return (
+        <div style={{ width: '100%', height: '100vh', overflow: 'hidden' }}>
+          {screen === 'home' && (
+            <HomeScreen
+              profile={profile}
+              stars={stars}
+              streak={streak}
+              onScan={() => setScreen('camera')}
+              onProfile={() => setScreen('profile')}
+            />
+          )}
+          
+          {screen === 'camera' && (
+            <CameraScreen
+              onCapture={(image) => {
+                setCapturedImage(image);
+                setScreen('scanning');
+              }}
+              onBack={() => setScreen('home')}
+            />
+          )}
+          
+          {screen === 'scanning' && (
+            <ScanningScreen
+              image={capturedImage}
+              onComplete={(data) => {
+                setLessonData(data);
+                setScreen('lesson');
+              }}
+              onBack={() => setScreen('camera')}
+            />
+          )}
+          
+          {screen === 'lesson' && lessonData && (
+            <LessonScreen
+              data={lessonData}
+              onComplete={() => {
+                setLessonData(null);
+                setCapturedImage(null);
+                setScreen('home');
+              }}
+              onBack={() => setScreen('home')}
+              onAddStars={addStars}
+            />
+          )}
+          
+          {screen === 'profile' && (
+            <ProfileScreen
+              profile={profile}
+              setProfile={setProfile}
+              stars={stars}
+              streak={streak}
+              onBack={() => setScreen('home')}
+            />
+          )}
+        </div>
+      );
+    };
+
+    // Render the app
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
