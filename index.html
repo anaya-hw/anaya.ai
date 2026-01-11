@@ -1585,38 +1585,69 @@ Rules:
                   <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
                     Choose Voice:
                   </label>
-                  <select
-                    value={selectedVoice}
-                    onChange={(e) => handleVoiceChange(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      fontSize: '14px',
-                      border: '2px solid #F3E5F5',
-                      borderRadius: '8px',
-                      outline: 'none',
-                      marginBottom: '10px',
-                      background: 'white',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {VOICE_OPTIONS.map(voice => (
-                      <option key={voice.id} value={voice.id}>
-                        {voice.name} - {voice.desc}
-                      </option>
-                    ))}
-                  </select>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                    <select
+                      value={selectedVoice}
+                      onChange={(e) => handleVoiceChange(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: '10px',
+                        fontSize: '14px',
+                        border: '2px solid #F3E5F5',
+                        borderRadius: '8px',
+                        outline: 'none',
+                        background: 'white',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {VOICE_OPTIONS.map(voice => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.name} - {voice.desc}
+                        </option>
+                      ))}
+                    </select>
+                    <button 
+                      onClick={() => {
+                        if (!elevenlabsKey) {
+                          alert('Please enter your ElevenLabs API key first!');
+                          return;
+                        }
+                        // Save the key and voice first
+                        updateSettings({ 
+                          elevenlabsKey: elevenlabsKey,
+                          elevenlabsVoiceId: selectedVoice,
+                          useElevenlabs: true 
+                        });
+                        // Small delay to ensure settings are saved
+                        setTimeout(() => {
+                          speak("Hi! I'm Whiskers! Let's learn together!");
+                        }, 100);
+                      }}
+                      style={{
+                        padding: '10px 14px',
+                        background: '#9C27B0',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      ▶️ Test
+                    </button>
+                  </div>
                   
                   <button onClick={saveElevenLabs} style={{
                     width: '100%',
                     padding: '10px',
-                    background: '#9C27B0',
+                    background: '#4CAF50',
                     color: 'white',
                     border: 'none',
                     borderRadius: '8px',
                     fontSize: '14px',
                     cursor: 'pointer'
-                  }}>Save ElevenLabs Key</button>
+                  }}>💾 Save Settings</button>
                   <p style={{ fontSize: '11px', color: '#888', marginTop: '6px' }}>
                     Get from elevenlabs.io → Profile → API Key (free tier: 10,000 chars/month)
                   </p>
