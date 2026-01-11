@@ -47,11 +47,10 @@
       ELEVENLABS_API_KEY: '',
       
       // ElevenLabs Voice ID - some good kid-friendly options:
-      // 'EXAVITQu4vr4xnSDxMaL' = Bella (warm female)
-      // 'jBpfuIE2acCO8z3wKNLl' = Gigi (young female, animated)
-      // 'XB0fDUnXU5powFXDhCwa' = Charlotte (warm, friendly)
-      // 'pqHfZKP75CvOlQylNhV4' = Bill (friendly male)
-      ELEVENLABS_VOICE_ID: 'jBpfuIE2acCO8z3wKNLl',
+      // 'EXAVITQu4vr4xnSDxMaL' = Sarah (soft female)
+      // 'MF3mGyEYCl7XYWbV9V6O' = Elli (cheerful young female)
+      // '21m00Tcm4TlvDq8ikWAM' = Rachel (calm female)
+      ELEVENLABS_VOICE_ID: 'EXAVITQu4vr4xnSDxMaL',
       
       // Set to false once you add API keys
       USE_DEMO_MODE: true,
@@ -73,7 +72,7 @@
           return saved ? JSON.parse(saved) : {
             openaiKey: '',
             elevenlabsKey: '',
-            elevenlabsVoiceId: 'jBpfuIE2acCO8z3wKNLl',
+            elevenlabsVoiceId: 'EXAVITQu4vr4xnSDxMaL',
             useElevenlabs: false,
             useDemoMode: true
           };
@@ -81,7 +80,7 @@
           return {
             openaiKey: '',
             elevenlabsKey: '',
-            elevenlabsVoiceId: 'jBpfuIE2acCO8z3wKNLl',
+            elevenlabsVoiceId: 'EXAVITQu4vr4xnSDxMaL',
             useElevenlabs: false,
             useDemoMode: true
           };
@@ -376,12 +375,10 @@
               },
               body: JSON.stringify({
                 text: text,
-                model_id: 'eleven_monolingual_v1',
+                model_id: 'eleven_multilingual_v2',
                 voice_settings: {
-                  stability: 0.6,
-                  similarity_boost: 0.85,
-                  style: 0.4,
-                  use_speaker_boost: true
+                  stability: 0.5,
+                  similarity_boost: 0.75
                 }
               })
             }
@@ -1395,17 +1392,16 @@ Rules:
     };
 
     // ============== ELEVENLABS VOICE OPTIONS ==============
+    // These are verified voice IDs from ElevenLabs' default library
     const VOICE_OPTIONS = [
-      { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Gigi', desc: 'Young, animated female' },
-      { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte', desc: 'Warm, nurturing female' },
-      { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', desc: 'Soft, friendly female' },
-      { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', desc: 'British, gentle female' },
-      { id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill', desc: 'Friendly male' },
-      { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', desc: 'Warm British male' },
-      { id: 'IKne3meq5aSn9XLyUdCD', name: 'Charlie', desc: 'Young Australian male' },
-      { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', desc: 'Young American male' },
-      { id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda', desc: 'Warm, friendly female' },
-      { id: 'nPczCjzI2devNBz1zQrb', name: 'Brian', desc: 'Deep, calm male' },
+      { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', desc: 'Soft, friendly female' },
+      { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', desc: 'Calm, warm female' },
+      { id: 'AZnzlk1XvdvUeBnXmlld', name: 'Domi', desc: 'Confident female' },
+      { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli', desc: 'Cheerful young female' },
+      { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh', desc: 'Deep, warm male' },
+      { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold', desc: 'Strong, clear male' },
+      { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', desc: 'Deep, narrative male' },
+      { id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam', desc: 'Warm, friendly male' },
     ];
 
     // ============== SETTINGS SCREEN ==============
@@ -1414,8 +1410,9 @@ Rules:
       const [name, setName] = useState(profile.name || '');
       const [openaiKey, setOpenaiKey] = useState(settings.openaiKey || '');
       const [elevenlabsKey, setElevenlabsKey] = useState(settings.elevenlabsKey || '');
-      const [selectedVoice, setSelectedVoice] = useState(settings.elevenlabsVoiceId || 'jBpfuIE2acCO8z3wKNLl');
+      const [selectedVoice, setSelectedVoice] = useState(settings.elevenlabsVoiceId || 'EXAVITQu4vr4xnSDxMaL');
       const [showAdvanced, setShowAdvanced] = useState(false);
+      const [testStatus, setTestStatus] = useState('');
       const { speak } = useTextToSpeech();
       
       const saveName = () => setProfile({ ...profile, name: name });
@@ -1445,13 +1442,12 @@ Rules:
       // Direct test function that uses current input values (not saved settings)
       const testVoiceDirectly = async () => {
         if (!elevenlabsKey) {
-          alert('Please enter your ElevenLabs API key first!');
+          setTestStatus('❌ Please enter your ElevenLabs API key first!');
           return;
         }
         
         const voiceName = VOICE_OPTIONS.find(v => v.id === selectedVoice)?.name || 'Unknown';
-        console.log('Testing voice:', voiceName, 'ID:', selectedVoice);
-        console.log('API Key (first 10 chars):', elevenlabsKey.substring(0, 10) + '...');
+        setTestStatus(`⏳ Testing "${voiceName}" voice...`);
         
         try {
           const response = await fetch(
@@ -1465,7 +1461,7 @@ Rules:
               },
               body: JSON.stringify({
                 text: "Hi! I'm Whiskers, your learning friend!",
-                model_id: 'eleven_monolingual_v1',
+                model_id: 'eleven_multilingual_v2',
                 voice_settings: {
                   stability: 0.5,
                   similarity_boost: 0.75
@@ -1474,13 +1470,9 @@ Rules:
             }
           );
           
-          console.log('Response status:', response.status);
-          
           if (!response.ok) {
             const errorText = await response.text();
-            console.error('ElevenLabs error response:', errorText);
-            
-            let errorMessage = 'Unknown error';
+            let errorMessage = `Error ${response.status}`;
             try {
               const errorJson = JSON.parse(errorText);
               errorMessage = errorJson.detail?.message || errorJson.detail || errorJson.message || errorText;
@@ -1488,27 +1480,27 @@ Rules:
               errorMessage = errorText;
             }
             
-            alert(`ElevenLabs Error (${response.status}):\n${errorMessage}`);
+            setTestStatus(`❌ Error ${response.status}: ${errorMessage}`);
             return;
           }
           
           const audioBlob = await response.blob();
-          console.log('Audio blob size:', audioBlob.size);
-          
           const audioUrl = URL.createObjectURL(audioBlob);
           const audio = new Audio(audioUrl);
           
           audio.onerror = (e) => {
-            console.error('Audio playback error:', e);
-            alert('Error playing audio');
+            setTestStatus('❌ Error playing audio');
+          };
+          
+          audio.onended = () => {
+            setTestStatus(`✅ "${voiceName}" voice working!`);
           };
           
           await audio.play();
-          console.log('Audio playing!');
+          setTestStatus(`🔊 Playing "${voiceName}"...`);
           
         } catch (error) {
-          console.error('Voice test error:', error);
-          alert(`Network error: ${error.message}\n\nThis might be a CORS issue. Check browser console for details.`);
+          setTestStatus(`❌ Network error: ${error.message}`);
         }
       };
       
@@ -1692,6 +1684,25 @@ Rules:
                       ▶️ Test
                     </button>
                   </div>
+                  
+                  {/* Status Display */}
+                  {testStatus && (
+                    <div style={{
+                      padding: '10px 14px',
+                      marginBottom: '10px',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      background: testStatus.startsWith('✅') ? '#E8F5E9' : 
+                                  testStatus.startsWith('❌') ? '#FFEBEE' : 
+                                  testStatus.startsWith('🔊') ? '#E3F2FD' : '#FFF8E1',
+                      color: testStatus.startsWith('✅') ? '#2E7D32' : 
+                             testStatus.startsWith('❌') ? '#C62828' : 
+                             testStatus.startsWith('🔊') ? '#1565C0' : '#F57F17',
+                      wordBreak: 'break-word'
+                    }}>
+                      {testStatus}
+                    </div>
+                  )}
                   
                   <button onClick={saveElevenLabs} style={{
                     width: '100%',
