@@ -1442,6 +1442,52 @@ Rules:
         updateSettings({ elevenlabsVoiceId: voiceId });
       };
       
+      // Direct test function that uses current input values (not saved settings)
+      const testVoiceDirectly = async () => {
+        if (!elevenlabsKey) {
+          alert('Please enter your ElevenLabs API key first!');
+          return;
+        }
+        
+        try {
+          const response = await fetch(
+            `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoice}`,
+            {
+              method: 'POST',
+              headers: {
+                'Accept': 'audio/mpeg',
+                'Content-Type': 'application/json',
+                'xi-api-key': elevenlabsKey
+              },
+              body: JSON.stringify({
+                text: "Hi! I'm Whiskers, your learning friend! Let's have fun together!",
+                model_id: 'eleven_monolingual_v1',
+                voice_settings: {
+                  stability: 0.6,
+                  similarity_boost: 0.85
+                }
+              })
+            }
+          );
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('ElevenLabs error:', errorText);
+            alert('Error: Check your API key is correct');
+            return;
+          }
+          
+          const audioBlob = await response.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          audio.play();
+          
+        } catch (error) {
+          console.error('Voice test error:', error);
+          alert('Error testing voice. Check your API key.');
+        }
+      };
+      
       const testVoice = () => {
         speak("Hello! I'm Whiskers, your learning friend! Let's have fun together!");
       };
@@ -1607,22 +1653,7 @@ Rules:
                       ))}
                     </select>
                     <button 
-                      onClick={() => {
-                        if (!elevenlabsKey) {
-                          alert('Please enter your ElevenLabs API key first!');
-                          return;
-                        }
-                        // Save the key and voice first
-                        updateSettings({ 
-                          elevenlabsKey: elevenlabsKey,
-                          elevenlabsVoiceId: selectedVoice,
-                          useElevenlabs: true 
-                        });
-                        // Small delay to ensure settings are saved
-                        setTimeout(() => {
-                          speak("Hi! I'm Whiskers! Let's learn together!");
-                        }, 100);
-                      }}
+                      onClick={testVoiceDirectly}
                       style={{
                         padding: '10px 14px',
                         background: '#9C27B0',
