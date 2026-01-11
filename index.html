@@ -73,6 +73,7 @@
             openaiKey: '',
             elevenlabsKey: '',
             elevenlabsVoiceId: 'EXAVITQu4vr4xnSDxMaL',
+            language: 'en',
             useElevenlabs: false,
             useDemoMode: true
           };
@@ -81,6 +82,7 @@
             openaiKey: '',
             elevenlabsKey: '',
             elevenlabsVoiceId: 'EXAVITQu4vr4xnSDxMaL',
+            language: 'en',
             useElevenlabs: false,
             useDemoMode: true
           };
@@ -1404,6 +1406,22 @@ Rules:
       { id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam', desc: 'Warm, friendly male' },
     ];
 
+    // ============== LANGUAGE OPTIONS ==============
+    const LANGUAGE_OPTIONS = [
+      { id: 'en', name: 'English', testPhrase: "Hi! I'm Whiskers, your learning friend!" },
+      { id: 'hi', name: 'हिंदी (Hindi)', testPhrase: "नमस्ते! मैं व्हिस्कर्स हूं, तुम्हारा सीखने वाला दोस्त!" },
+      { id: 'ta', name: 'தமிழ் (Tamil)', testPhrase: "வணக்கம்! நான் விஸ்கர்ஸ், உங்கள் கற்றல் நண்பன்!" },
+      { id: 'ur', name: 'اردو (Urdu)', testPhrase: "السلام علیکم! میں وسکرز ہوں، آپ کا سیکھنے والا دوست!" },
+      { id: 'te', name: 'తెలుగు (Telugu)', testPhrase: "నమస్కారం! నేను విస్కర్స్, మీ నేర్చుకునే స్నేహితుడిని!" },
+      { id: 'bn', name: 'বাংলা (Bengali)', testPhrase: "নমস্কার! আমি হুইস্কার্স, তোমার শেখার বন্ধু!" },
+      { id: 'mr', name: 'मराठी (Marathi)', testPhrase: "नमस्कार! मी व्हिस्कर्स आहे, तुमचा शिकण्याचा मित्र!" },
+      { id: 'gu', name: 'ગુજરાતી (Gujarati)', testPhrase: "નમસ્તે! હું વ્હિસ્કર્સ છું, તમારો શીખવાનો મિત્ર!" },
+      { id: 'kn', name: 'ಕನ್ನಡ (Kannada)', testPhrase: "ನಮಸ್ಕಾರ! ನಾನು ವಿಸ್ಕರ್ಸ್, ನಿಮ್ಮ ಕಲಿಕೆಯ ಗೆಳೆಯ!" },
+      { id: 'ml', name: 'മലയാളം (Malayalam)', testPhrase: "നമസ്കാരം! ഞാൻ വിസ്കേഴ്സ് ആണ്, നിങ്ങളുടെ പഠന സുഹൃത്ത്!" },
+      { id: 'pa', name: 'ਪੰਜਾਬੀ (Punjabi)', testPhrase: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ ਵਿਸਕਰਜ਼ ਹਾਂ, ਤੁਹਾਡਾ ਸਿੱਖਣ ਵਾਲਾ ਦੋਸਤ!" },
+      { id: 'ar', name: 'العربية (Arabic)', testPhrase: "مرحباً! أنا ويسكرز، صديقك في التعلم!" },
+    ];
+
     // ============== SETTINGS SCREEN ==============
     const SettingsScreen = ({ profile, setProfile, stars, streak, onBack }) => {
       const { settings, updateSettings } = useSettings();
@@ -1411,6 +1429,7 @@ Rules:
       const [openaiKey, setOpenaiKey] = useState(settings.openaiKey || '');
       const [elevenlabsKey, setElevenlabsKey] = useState(settings.elevenlabsKey || '');
       const [selectedVoice, setSelectedVoice] = useState(settings.elevenlabsVoiceId || 'EXAVITQu4vr4xnSDxMaL');
+      const [selectedLanguage, setSelectedLanguage] = useState(settings.language || 'en');
       const [showAdvanced, setShowAdvanced] = useState(false);
       const [testStatus, setTestStatus] = useState('');
       const { speak } = useTextToSpeech();
@@ -1429,6 +1448,7 @@ Rules:
         updateSettings({ 
           elevenlabsKey: elevenlabsKey,
           elevenlabsVoiceId: selectedVoice,
+          language: selectedLanguage,
           useElevenlabs: !!elevenlabsKey 
         });
         alert(elevenlabsKey ? '✅ ElevenLabs voice enabled!' : 'Browser voice enabled');
@@ -1439,6 +1459,11 @@ Rules:
         updateSettings({ elevenlabsVoiceId: voiceId });
       };
       
+      const handleLanguageChange = (langId) => {
+        setSelectedLanguage(langId);
+        updateSettings({ language: langId });
+      };
+      
       // Direct test function that uses current input values (not saved settings)
       const testVoiceDirectly = async () => {
         if (!elevenlabsKey) {
@@ -1447,7 +1472,10 @@ Rules:
         }
         
         const voiceName = VOICE_OPTIONS.find(v => v.id === selectedVoice)?.name || 'Unknown';
-        setTestStatus(`⏳ Testing "${voiceName}" voice...`);
+        const langOption = LANGUAGE_OPTIONS.find(l => l.id === selectedLanguage);
+        const testPhrase = langOption?.testPhrase || "Hi! I'm Whiskers!";
+        
+        setTestStatus(`⏳ Testing "${voiceName}" in ${langOption?.name || 'English'}...`);
         
         try {
           const response = await fetch(
@@ -1460,7 +1488,7 @@ Rules:
                 'xi-api-key': elevenlabsKey
               },
               body: JSON.stringify({
-                text: "Hi! I'm Whiskers, your learning friend!",
+                text: testPhrase,
                 model_id: 'eleven_turbo_v2_5',
                 voice_settings: {
                   stability: 0.5,
@@ -1493,11 +1521,11 @@ Rules:
           };
           
           audio.onended = () => {
-            setTestStatus(`✅ "${voiceName}" voice working!`);
+            setTestStatus(`✅ "${voiceName}" working in ${langOption?.name || 'English'}!`);
           };
           
           await audio.play();
-          setTestStatus(`🔊 Playing "${voiceName}"...`);
+          setTestStatus(`🔊 Playing "${voiceName}" in ${langOption?.name || 'English'}...`);
           
         } catch (error) {
           setTestStatus(`❌ Network error: ${error.message}`);
@@ -1685,6 +1713,32 @@ Rules:
                     </button>
                   </div>
                   
+                  {/* Language Selector */}
+                  <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                    Choose Language:
+                  </label>
+                  <select
+                    value={selectedLanguage}
+                    onChange={(e) => handleLanguageChange(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      fontSize: '14px',
+                      border: '2px solid #E1BEE7',
+                      borderRadius: '8px',
+                      outline: 'none',
+                      background: 'white',
+                      cursor: 'pointer',
+                      marginBottom: '10px'
+                    }}
+                  >
+                    {LANGUAGE_OPTIONS.map(lang => (
+                      <option key={lang.id} value={lang.id}>
+                        {lang.name}
+                      </option>
+                    ))}
+                  </select>
+                  
                   {/* Status Display */}
                   {testStatus && (
                     <div style={{
@@ -1727,8 +1781,9 @@ Rules:
                 <strong>Current Setup:</strong><br/>
                 🤖 AI: {settings.useDemoMode ? 'Demo mode' : 'ChatGPT'}<br/>
                 🎙️ Voice: {settings.useElevenlabs && settings.elevenlabsKey 
-                  ? `ElevenLabs (${VOICE_OPTIONS.find(v => v.id === settings.elevenlabsVoiceId)?.name || 'Gigi'})` 
-                  : 'Browser TTS'}
+                  ? `ElevenLabs (${VOICE_OPTIONS.find(v => v.id === settings.elevenlabsVoiceId)?.name || 'Sarah'})` 
+                  : 'Browser TTS'}<br/>
+                🌐 Language: {LANGUAGE_OPTIONS.find(l => l.id === settings.language)?.name || 'English'}
               </p>
             </div>
           </div>
