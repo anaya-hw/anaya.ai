@@ -1394,12 +1394,27 @@ Rules:
       );
     };
 
+    // ============== ELEVENLABS VOICE OPTIONS ==============
+    const VOICE_OPTIONS = [
+      { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Gigi', desc: 'Young, animated female' },
+      { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte', desc: 'Warm, nurturing female' },
+      { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', desc: 'Soft, friendly female' },
+      { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', desc: 'British, gentle female' },
+      { id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill', desc: 'Friendly male' },
+      { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', desc: 'Warm British male' },
+      { id: 'IKne3meq5aSn9XLyUdCD', name: 'Charlie', desc: 'Young Australian male' },
+      { id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam', desc: 'Young American male' },
+      { id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda', desc: 'Warm, friendly female' },
+      { id: 'nPczCjzI2devNBz1zQrb', name: 'Brian', desc: 'Deep, calm male' },
+    ];
+
     // ============== SETTINGS SCREEN ==============
     const SettingsScreen = ({ profile, setProfile, stars, streak, onBack }) => {
       const { settings, updateSettings } = useSettings();
       const [name, setName] = useState(profile.name || '');
       const [openaiKey, setOpenaiKey] = useState(settings.openaiKey || '');
       const [elevenlabsKey, setElevenlabsKey] = useState(settings.elevenlabsKey || '');
+      const [selectedVoice, setSelectedVoice] = useState(settings.elevenlabsVoiceId || 'jBpfuIE2acCO8z3wKNLl');
       const [showAdvanced, setShowAdvanced] = useState(false);
       const { speak } = useTextToSpeech();
       
@@ -1416,9 +1431,15 @@ Rules:
       const saveElevenLabs = () => {
         updateSettings({ 
           elevenlabsKey: elevenlabsKey,
+          elevenlabsVoiceId: selectedVoice,
           useElevenlabs: !!elevenlabsKey 
         });
         alert(elevenlabsKey ? '✅ ElevenLabs voice enabled!' : 'Browser voice enabled');
+      };
+      
+      const handleVoiceChange = (voiceId) => {
+        setSelectedVoice(voiceId);
+        updateSettings({ elevenlabsVoiceId: voiceId });
       };
       
       const testVoice = () => {
@@ -1559,6 +1580,33 @@ Rules:
                     placeholder="Enter API key"
                     style={{ width: '100%', padding: '10px', fontSize: '14px', border: '2px solid #F3E5F5', borderRadius: '8px', outline: 'none', marginBottom: '10px' }}
                   />
+                  
+                  {/* Voice Selector */}
+                  <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
+                    Choose Voice:
+                  </label>
+                  <select
+                    value={selectedVoice}
+                    onChange={(e) => handleVoiceChange(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      fontSize: '14px',
+                      border: '2px solid #F3E5F5',
+                      borderRadius: '8px',
+                      outline: 'none',
+                      marginBottom: '10px',
+                      background: 'white',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {VOICE_OPTIONS.map(voice => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.name} - {voice.desc}
+                      </option>
+                    ))}
+                  </select>
+                  
                   <button onClick={saveElevenLabs} style={{
                     width: '100%',
                     padding: '10px',
@@ -1581,7 +1629,9 @@ Rules:
               <p style={{ fontSize: '14px', color: '#5D4E4E', lineHeight: 1.5, margin: 0 }}>
                 <strong>Current Setup:</strong><br/>
                 🤖 AI: {settings.useDemoMode ? 'Demo mode' : 'ChatGPT'}<br/>
-                🎙️ Voice: {settings.useElevenlabs && settings.elevenlabsKey ? 'ElevenLabs' : 'Browser TTS'}
+                🎙️ Voice: {settings.useElevenlabs && settings.elevenlabsKey 
+                  ? `ElevenLabs (${VOICE_OPTIONS.find(v => v.id === settings.elevenlabsVoiceId)?.name || 'Gigi'})` 
+                  : 'Browser TTS'}
               </p>
             </div>
           </div>
