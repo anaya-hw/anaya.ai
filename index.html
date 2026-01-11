@@ -1449,6 +1449,10 @@ Rules:
           return;
         }
         
+        const voiceName = VOICE_OPTIONS.find(v => v.id === selectedVoice)?.name || 'Unknown';
+        console.log('Testing voice:', voiceName, 'ID:', selectedVoice);
+        console.log('API Key (first 10 chars):', elevenlabsKey.substring(0, 10) + '...');
+        
         try {
           const response = await fetch(
             `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoice}`,
@@ -1460,31 +1464,51 @@ Rules:
                 'xi-api-key': elevenlabsKey
               },
               body: JSON.stringify({
-                text: "Hi! I'm Whiskers, your learning friend! Let's have fun together!",
+                text: "Hi! I'm Whiskers, your learning friend!",
                 model_id: 'eleven_monolingual_v1',
                 voice_settings: {
-                  stability: 0.6,
-                  similarity_boost: 0.85
+                  stability: 0.5,
+                  similarity_boost: 0.75
                 }
               })
             }
           );
           
+          console.log('Response status:', response.status);
+          
           if (!response.ok) {
             const errorText = await response.text();
-            console.error('ElevenLabs error:', errorText);
-            alert('Error: Check your API key is correct');
+            console.error('ElevenLabs error response:', errorText);
+            
+            let errorMessage = 'Unknown error';
+            try {
+              const errorJson = JSON.parse(errorText);
+              errorMessage = errorJson.detail?.message || errorJson.detail || errorJson.message || errorText;
+            } catch {
+              errorMessage = errorText;
+            }
+            
+            alert(`ElevenLabs Error (${response.status}):\n${errorMessage}`);
             return;
           }
           
           const audioBlob = await response.blob();
+          console.log('Audio blob size:', audioBlob.size);
+          
           const audioUrl = URL.createObjectURL(audioBlob);
           const audio = new Audio(audioUrl);
-          audio.play();
+          
+          audio.onerror = (e) => {
+            console.error('Audio playback error:', e);
+            alert('Error playing audio');
+          };
+          
+          await audio.play();
+          console.log('Audio playing!');
           
         } catch (error) {
           console.error('Voice test error:', error);
-          alert('Error testing voice. Check your API key.');
+          alert(`Network error: ${error.message}\n\nThis might be a CORS issue. Check browser console for details.`);
         }
       };
       
