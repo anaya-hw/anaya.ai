@@ -656,25 +656,19 @@ Rules:
 
     // ============== HOME SCREEN ==============
     const HomeScreen = ({ profile, stars, streak, onScan, onProfile }) => {
-      const [dialogue, setDialogue] = useState("Hi there, friend! Ready to learn something amazing today?");
+      const { settings } = useSettings();
+      const t = getTranslation(settings.language);
+      const [dialogue, setDialogue] = useState(t.greeting);
       const [catMood, setCatMood] = useState('happy');
       const { speak, isSpeaking } = useTextToSpeech();
-      const { settings } = useSettings();
-      
-      const greetings = [
-        "Hi there, friend! Ready to learn something amazing today?",
-        "Yay, you're here! Let's have fun learning!",
-        "Hello, superstar! What should we explore?",
-        "I'm so happy to see you!"
-      ];
       
       useEffect(() => {
         const greeting = profile.name 
-          ? `Hi ${profile.name}! Ready to learn today?`
-          : greetings[Math.floor(Math.random() * greetings.length)];
+          ? t.greetingWithName(profile.name)
+          : t.greetings[Math.floor(Math.random() * t.greetings.length)];
         setDialogue(greeting);
         setTimeout(() => speak(greeting), 500);
-      }, []);
+      }, [settings.language]);
       
       const getModeLabel = () => {
         if (settings.useDemoMode) return '📋 Demo';
@@ -791,7 +785,7 @@ Rules:
               }}>
                 <span style={{ fontSize: '24px' }}>🐱</span>
                 <span style={{ fontSize: '20px', color: '#FF8B5E', fontWeight: '600' }}>
-                  Hi, {profile.name}!
+                  {profile.name}
                 </span>
               </div>
             )}
@@ -800,8 +794,8 @@ Rules:
             <button
               onClick={() => {
                 setCatMood('excited');
-                setDialogue("Ooh! Let me see your homework!");
-                speak("Ooh! Let me see your homework!");
+                setDialogue(t.celebration.letMeSee);
+                speak(t.celebration.letMeSee);
                 setTimeout(onScan, 1500);
               }}
               style={{
@@ -821,10 +815,10 @@ Rules:
               <span style={{ fontSize: '38px' }}>📸</span>
               <div style={{ textAlign: 'left' }}>
                 <div style={{ fontSize: '22px', color: 'white', fontWeight: 'bold' }}>
-                  Scan Homework
+                  {t.scanButton}
                 </div>
                 <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.85)' }}>
-                  Take a photo of your worksheet
+                  {t.scanSubtext}
                 </div>
               </div>
             </button>
@@ -841,6 +835,8 @@ Rules:
       const [stream, setStream] = useState(null);
       const [cameraReady, setCameraReady] = useState(false);
       const [error, setError] = useState(null);
+      const { settings } = useSettings();
+      const t = getTranslation(settings.language);
       
       useEffect(() => {
         const startCamera = async () => {
@@ -941,7 +937,7 @@ Rules:
               ←
             </button>
             <span style={{ color: 'white', fontSize: '18px', fontWeight: '500' }}>
-              📸 Point at your homework
+              📸 {t.cameraTitle}
             </span>
             <div style={{ width: '44px' }}></div>
           </div>
@@ -971,10 +967,10 @@ Rules:
             }}>
               <span style={{ fontSize: '60px', marginBottom: '20px' }}>📷</span>
               <p style={{ fontSize: '18px', marginBottom: '10px' }}>
-                Camera not available
+                {t.cameraNotAvailable}
               </p>
               <p style={{ fontSize: '14px', color: '#aaa', marginBottom: '20px' }}>
-                {error || 'Please upload a photo instead'}
+                {error || t.uploadInstead}
               </p>
             </div>
           )}
@@ -1063,28 +1059,29 @@ Rules:
 
     // ============== SCANNING SCREEN ==============
     const ScanningScreen = ({ image, onComplete, onBack }) => {
-      const [status, setStatus] = useState('Whiskers is looking at your homework...');
+      const { settings } = useSettings();
+      const t = getTranslation(settings.language);
+      const [status, setStatus] = useState(t.scanning.looking);
       const [progress, setProgress] = useState(0);
       const [detectedText, setDetectedText] = useState('');
       const [error, setError] = useState(null);
       const { speak, isSpeaking } = useTextToSpeech();
-      const { settings } = useSettings();
       
       useEffect(() => {
-        speak("Let me take a look at your homework!");
+        speak(t.scanning.looking);
         runOCR();
       }, []);
       
       const runOCR = async () => {
         try {
-          setStatus('Starting up my reading glasses...');
+          setStatus(t.scanning.starting);
           setProgress(10);
           
           if (typeof Tesseract === 'undefined') {
             throw new Error('OCR library not loaded');
           }
           
-          setStatus('Reading the words and numbers...');
+          setStatus(t.scanning.reading);
           setProgress(30);
           
           const result = await Tesseract.recognize(
@@ -1104,18 +1101,18 @@ Rules:
           setDetectedText(text);
           
           setProgress(75);
-          setStatus('Found it! Now thinking about how to help...');
+          setStatus(t.scanning.found);
           
           if (!text) {
-            setStatus("Hmm, I couldn't read that clearly. Let me try my best!");
+            setStatus(t.scanning.couldntRead);
           }
           
           setProgress(85);
           const lesson = await generateAiLesson(text || '5 + 3 = ?', settings);
           
           setProgress(100);
-          setStatus('Got it! Let me teach you!');
-          speak("Got it! Let me teach you!");
+          setStatus(t.scanning.gotIt);
+          speak(t.scanning.gotIt);
           
           setTimeout(() => {
             onComplete({
@@ -1127,7 +1124,7 @@ Rules:
         } catch (err) {
           console.error('OCR Error:', err);
           setError(err.message);
-          setStatus("Oops! Let me try a different way...");
+          setStatus(t.scanning.tryDifferent);
           
           setTimeout(async () => {
             const lesson = generateDemoLesson('3 + 2 = ?');
@@ -1183,7 +1180,7 @@ Rules:
                 border: '2px solid #E8F5E9'
               }}>
                 <p style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>
-                  📝 I found:
+                  📝 {t.scanning.iFound}
                 </p>
                 <p style={{ fontSize: '16px', color: '#333' }}>
                   {detectedText.slice(0, 100)}{detectedText.length > 100 ? '...' : ''}
@@ -1216,7 +1213,7 @@ Rules:
               cursor: 'pointer'
             }}
           >
-            ← Try again
+            ← {t.lesson.tryAgain}
           </button>
         </div>
       );
@@ -1227,6 +1224,8 @@ Rules:
       const [currentStep, setCurrentStep] = useState(0);
       const [showCelebration, setShowCelebration] = useState(false);
       const { speak, isSpeaking } = useTextToSpeech();
+      const { settings } = useSettings();
+      const t = getTranslation(settings.language);
       
       const steps = data.lesson.steps;
       const step = steps[currentStep];
@@ -1242,7 +1241,7 @@ Rules:
           setCurrentStep(currentStep + 1);
         } else {
           setShowCelebration(true);
-          speak("Amazing job! You earned 3 stars!");
+          speak(t.celebration.amazing + " " + t.celebration.earned);
           onAddStars(3);
           setTimeout(onComplete, 4000);
         }
@@ -1265,13 +1264,13 @@ Rules:
           }}>
             <div style={{ fontSize: '70px', animation: 'bounce 0.5s infinite' }}>🎉</div>
             <WhiskersCat mood="celebrating" size={180} isTalking={isSpeaking} />
-            <h1 style={{ fontSize: '30px', color: '#FF8B5E', margin: '16px 0' }}>Amazing Job!</h1>
+            <h1 style={{ fontSize: '30px', color: '#FF8B5E', margin: '16px 0' }}>{t.celebration.amazing}</h1>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
               {[1, 2, 3].map(i => (
                 <span key={i} style={{ fontSize: '44px', animation: `sparkle 0.5s ease-out ${i * 0.2}s` }}>⭐</span>
               ))}
             </div>
-            <p style={{ fontSize: '20px', color: '#5D4E4E' }}>You earned 3 stars!</p>
+            <p style={{ fontSize: '20px', color: '#5D4E4E' }}>{t.celebration.earned}</p>
           </div>
         );
       }
@@ -1299,7 +1298,7 @@ Rules:
               fontSize: '15px',
               cursor: 'pointer',
               color: '#FF8B5E'
-            }}>← Back</button>
+            }}>← {t.lesson.back}</button>
             
             <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '180px' }}>
               {steps.map((_, i) => (
@@ -1372,7 +1371,7 @@ Rules:
               fontSize: '17px',
               cursor: currentStep === 0 ? 'not-allowed' : 'pointer',
               color: currentStep === 0 ? '#AAA' : '#FF8B5E'
-            }}>← Back</button>
+            }}>← {t.lesson.back}</button>
             
             <button onClick={nextStep} style={{
               flex: 2,
@@ -1386,7 +1385,7 @@ Rules:
               fontWeight: 'bold',
               boxShadow: '0 4px 16px rgba(255,139,94,0.4)'
             }}>
-              {currentStep === steps.length - 1 ? '🎉 Finish!' : 'Next →'}
+              {currentStep === steps.length - 1 ? `🎉 ${t.lesson.finish}` : `${t.lesson.next} →`}
             </button>
           </div>
         </div>
@@ -1422,9 +1421,241 @@ Rules:
       { id: 'ar', name: 'العربية (Arabic)', testPhrase: "مرحباً! أنا ويسكرز، صديقك في التعلم!" },
     ];
 
+    // ============== TRANSLATIONS ==============
+    const TRANSLATIONS = {
+      en: {
+        greeting: "Hi there, friend! Ready to learn something amazing today?",
+        greetingWithName: (name) => `Hi ${name}! Ready to learn today?`,
+        greetings: [
+          "Hi there, friend! Ready to learn something amazing today?",
+          "Yay, you're here! Let's have fun learning!",
+          "Hello, superstar! What should we explore?",
+          "I'm so happy to see you!"
+        ],
+        scanButton: "Scan Homework",
+        scanSubtext: "Take a photo of your worksheet",
+        cameraTitle: "Point at your homework",
+        cameraNotAvailable: "Camera not available",
+        uploadInstead: "Please upload a photo instead",
+        scanning: {
+          looking: "Whiskers is looking at your homework...",
+          starting: "Starting up my reading glasses...",
+          reading: "Reading the words and numbers...",
+          found: "Found it! Now thinking about how to help...",
+          gotIt: "Got it! Let me teach you!",
+          couldntRead: "Hmm, I couldn't read that clearly. Let me try my best!",
+          tryDifferent: "Oops! Let me try a different way...",
+          iFound: "I found:"
+        },
+        lesson: {
+          back: "Back",
+          next: "Next",
+          finish: "Finish!",
+          tryAgain: "Try again"
+        },
+        celebration: {
+          amazing: "Amazing Job!",
+          earned: "You earned 3 stars!",
+          letMeSee: "Ooh! Let me see your homework!"
+        },
+        settings: {
+          title: "Settings",
+          childName: "Child's Name",
+          enterName: "Enter name",
+          stars: "Stars",
+          streak: "Streak",
+          testVoice: "Test Voice",
+          showApi: "Show API Settings",
+          hideApi: "Hide API Settings",
+          currentSetup: "Current Setup",
+          ai: "AI",
+          voice: "Voice",
+          language: "Language",
+          demoMode: "Demo mode",
+          browserTts: "Browser TTS",
+          chooseVoice: "Choose Voice:",
+          chooseLanguage: "Choose Language:",
+          saveSettings: "Save Settings",
+          apiKeyHint: "Get from elevenlabs.io → Profile → API Key"
+        }
+      },
+      hi: {
+        greeting: "नमस्ते दोस्त! आज कुछ मज़ेदार सीखने के लिए तैयार हो?",
+        greetingWithName: (name) => `नमस्ते ${name}! आज सीखने के लिए तैयार?`,
+        greetings: [
+          "नमस्ते दोस्त! आज कुछ मज़ेदार सीखने के लिए तैयार हो?",
+          "यहाँ आकर बहुत अच्छा लगा! चलो मज़े से सीखते हैं!",
+          "हेलो सुपरस्टार! आज क्या सीखें?",
+          "तुम्हें देखकर बहुत खुशी हुई!"
+        ],
+        scanButton: "होमवर्क स्कैन करो",
+        scanSubtext: "अपनी वर्कशीट की फोटो लो",
+        cameraTitle: "अपना होमवर्क दिखाओ",
+        cameraNotAvailable: "कैमरा उपलब्ध नहीं है",
+        uploadInstead: "कृपया फोटो अपलोड करें",
+        scanning: {
+          looking: "व्हिस्कर्स तुम्हारा होमवर्क देख रहा है...",
+          starting: "अपना चश्मा लगा रहा हूं...",
+          reading: "शब्द और नंबर पढ़ रहा हूं...",
+          found: "मिल गया! अब सोच रहा हूं कैसे मदद करूं...",
+          gotIt: "समझ गया! चलो सिखाता हूं!",
+          couldntRead: "हम्म, ठीक से पढ़ नहीं पाया। कोशिश करता हूं!",
+          tryDifferent: "उफ़! दूसरे तरीके से कोशिश करता हूं...",
+          iFound: "मुझे मिला:"
+        },
+        lesson: {
+          back: "पीछे",
+          next: "आगे",
+          finish: "खत्म!",
+          tryAgain: "फिर से"
+        },
+        celebration: {
+          amazing: "शाबाश!",
+          earned: "तुमने 3 सितारे जीते!",
+          letMeSee: "वाह! मुझे अपना होमवर्क दिखाओ!"
+        },
+        settings: {
+          title: "सेटिंग्स",
+          childName: "बच्चे का नाम",
+          enterName: "नाम लिखो",
+          stars: "सितारे",
+          streak: "स्ट्रीक",
+          testVoice: "आवाज़ टेस्ट करो",
+          showApi: "API सेटिंग्स दिखाओ",
+          hideApi: "API सेटिंग्स छुपाओ",
+          currentSetup: "मौजूदा सेटअप",
+          ai: "AI",
+          voice: "आवाज़",
+          language: "भाषा",
+          demoMode: "डेमो मोड",
+          browserTts: "ब्राउज़र TTS",
+          chooseVoice: "आवाज़ चुनो:",
+          chooseLanguage: "भाषा चुनो:",
+          saveSettings: "सेटिंग्स सेव करो",
+          apiKeyHint: "elevenlabs.io से API Key लो"
+        }
+      },
+      ta: {
+        greeting: "வணக்கம் நண்பா! இன்று ஏதாவது அருமையான விஷயம் கற்க தயாரா?",
+        greetingWithName: (name) => `வணக்கம் ${name}! இன்று கற்க தயாரா?`,
+        greetings: [
+          "வணக்கம் நண்பா! இன்று ஏதாவது அருமையான விஷயம் கற்க தயாரா?",
+          "நீ வந்துட்டே! மகிழ்ச்சியா படிக்கலாம்!",
+          "ஹலோ சூப்பர்ஸ்டார்! என்ன கற்போம்?",
+          "உன்னைப் பார்த்ததில் மிகவும் மகிழ்ச்சி!"
+        ],
+        scanButton: "வீட்டுப்பாடம் ஸ்கேன்",
+        scanSubtext: "உன் ஒர்க்ஷீட்டை புகைப்படம் எடு",
+        cameraTitle: "வீட்டுப்பாடத்தை காட்டு",
+        cameraNotAvailable: "கேமரா இல்லை",
+        uploadInstead: "புகைப்படம் அப்லோட் செய்யவும்",
+        scanning: {
+          looking: "விஸ்கர்ஸ் உன் வீட்டுப்பாடம் பார்க்கிறார்...",
+          starting: "என் கண்ணாடி போடுகிறேன்...",
+          reading: "வார்த்தைகள் எண்கள் படிக்கிறேன்...",
+          found: "கிடைச்சுது! எப்படி உதவலாம் யோசிக்கிறேன்...",
+          gotIt: "புரிஞ்சுது! கற்றுக்கொடுக்கிறேன்!",
+          couldntRead: "சரியா படிக்க முடியல. முயற்சி செய்கிறேன்!",
+          tryDifferent: "அட! வேற வழியில் முயற்சிக்கிறேன்...",
+          iFound: "எனக்கு கிடைச்சது:"
+        },
+        lesson: {
+          back: "பின்",
+          next: "அடுத்து",
+          finish: "முடிந்தது!",
+          tryAgain: "மீண்டும்"
+        },
+        celebration: {
+          amazing: "அருமை!",
+          earned: "நீ 3 நட்சத்திரங்கள் வென்றாய்!",
+          letMeSee: "வா! உன் வீட்டுப்பாடம் காட்டு!"
+        },
+        settings: {
+          title: "அமைப்புகள்",
+          childName: "குழந்தையின் பெயர்",
+          enterName: "பெயர் எழுது",
+          stars: "நட்சத்திரங்கள்",
+          streak: "ஸ்ட்ரீக்",
+          testVoice: "குரல் சோதனை",
+          showApi: "API அமைப்புகள் காட்டு",
+          hideApi: "API அமைப்புகள் மறை",
+          currentSetup: "தற்போதைய அமைப்பு",
+          ai: "AI",
+          voice: "குரல்",
+          language: "மொழி",
+          demoMode: "டெமோ மோட்",
+          browserTts: "பிரவுசர் TTS",
+          chooseVoice: "குரல் தேர்வு:",
+          chooseLanguage: "மொழி தேர்வு:",
+          saveSettings: "சேமி",
+          apiKeyHint: "elevenlabs.io இல் API Key எடுக்கவும்"
+        }
+      },
+      ur: {
+        greeting: "السلام علیکم دوست! آج کچھ نیا سیکھنے کے لیے تیار ہو?",
+        greetingWithName: (name) => `السلام علیکم ${name}! آج سیکھنے کے لیے تیار؟`,
+        greetings: [
+          "السلام علیکم دوست! آج کچھ نیا سیکھنے کے لیے تیار ہو?",
+          "تم آ گئے! چلو مزے سے سیکھتے ہیں!",
+          "ہیلو سپر سٹار! آج کیا سیکھیں؟",
+          "تمہیں دیکھ کر بہت خوشی ہوئی!"
+        ],
+        scanButton: "ہوم ورک سکین کرو",
+        scanSubtext: "اپنی ورک شیٹ کی تصویر لو",
+        cameraTitle: "اپنا ہوم ورک دکھاؤ",
+        cameraNotAvailable: "کیمرہ دستیاب نہیں",
+        uploadInstead: "براہ کرم تصویر اپلوڈ کریں",
+        scanning: {
+          looking: "وسکرز تمہارا ہوم ورک دیکھ رہا ہے...",
+          starting: "اپنا چشمہ لگا رہا ہوں...",
+          reading: "الفاظ اور نمبر پڑھ رہا ہوں...",
+          found: "مل گیا! سوچ رہا ہوں کیسے مدد کروں...",
+          gotIt: "سمجھ گیا! چلو سکھاتا ہوں!",
+          couldntRead: "ٹھیک سے پڑھ نہیں پایا۔ کوشش کرتا ہوں!",
+          tryDifferent: "اوہ! دوسرے طریقے سے کوشش کرتا ہوں...",
+          iFound: "مجھے ملا:"
+        },
+        lesson: {
+          back: "پیچھے",
+          next: "آگے",
+          finish: "ختم!",
+          tryAgain: "دوبارہ"
+        },
+        celebration: {
+          amazing: "شاباش!",
+          earned: "تم نے 3 ستارے جیتے!",
+          letMeSee: "واہ! مجھے اپنا ہوم ورک دکھاؤ!"
+        },
+        settings: {
+          title: "ترتیبات",
+          childName: "بچے کا نام",
+          enterName: "نام لکھو",
+          stars: "ستارے",
+          streak: "سٹریک",
+          testVoice: "آواز ٹیسٹ کرو",
+          showApi: "API ترتیبات دکھاؤ",
+          hideApi: "API ترتیبات چھپاؤ",
+          currentSetup: "موجودہ سیٹ اپ",
+          ai: "AI",
+          voice: "آواز",
+          language: "زبان",
+          demoMode: "ڈیمو موڈ",
+          browserTts: "براؤزر TTS",
+          chooseVoice: "آواز چنو:",
+          chooseLanguage: "زبان چنو:",
+          saveSettings: "محفوظ کرو",
+          apiKeyHint: "elevenlabs.io سے API Key لو"
+        }
+      }
+    };
+
+    // Fallback to English for unsupported languages
+    const getTranslation = (lang) => TRANSLATIONS[lang] || TRANSLATIONS.en;
+
     // ============== SETTINGS SCREEN ==============
     const SettingsScreen = ({ profile, setProfile, stars, streak, onBack }) => {
       const { settings, updateSettings } = useSettings();
+      const t = getTranslation(settings.language);
       const [name, setName] = useState(profile.name || '');
       const [openaiKey, setOpenaiKey] = useState(settings.openaiKey || '');
       const [elevenlabsKey, setElevenlabsKey] = useState(settings.elevenlabsKey || '');
@@ -1560,8 +1791,8 @@ Rules:
               fontSize: '15px',
               cursor: 'pointer',
               color: '#FF8B5E'
-            }}>← Back</button>
-            <h1 style={{ fontSize: '22px', color: '#5D4E4E' }}>Settings</h1>
+            }}>← {t.lesson.back}</button>
+            <h1 style={{ fontSize: '22px', color: '#5D4E4E' }}>{t.settings.title}</h1>
           </div>
           
           <div style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
@@ -1569,13 +1800,13 @@ Rules:
             
             {/* Name */}
             <div style={{ background: 'white', borderRadius: '16px', padding: '16px', width: '100%', maxWidth: '380px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              <label style={{ display: 'block', fontSize: '14px', color: '#888', marginBottom: '6px' }}>Child's Name</label>
+              <label style={{ display: 'block', fontSize: '14px', color: '#888', marginBottom: '6px' }}>{t.settings.childName}</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onBlur={saveName}
-                placeholder="Enter name"
+                placeholder={t.settings.enterName}
                 style={{ width: '100%', padding: '12px', fontSize: '18px', border: '2px solid #FFE4D6', borderRadius: '10px', outline: 'none' }}
               />
             </div>
@@ -1585,12 +1816,12 @@ Rules:
               <div style={{ flex: 1, background: 'rgba(255,213,79,0.2)', borderRadius: '16px', padding: '14px', textAlign: 'center' }}>
                 <div style={{ fontSize: '32px' }}>⭐</div>
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#FFB300' }}>{stars}</div>
-                <div style={{ color: '#888', fontSize: '12px' }}>Stars</div>
+                <div style={{ color: '#888', fontSize: '12px' }}>{t.settings.stars}</div>
               </div>
               <div style={{ flex: 1, background: 'rgba(255,139,94,0.2)', borderRadius: '16px', padding: '14px', textAlign: 'center' }}>
                 <div style={{ fontSize: '32px' }}>🔥</div>
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#FF8B5E' }}>{streak}</div>
-                <div style={{ color: '#888', fontSize: '12px' }}>Streak</div>
+                <div style={{ color: '#888', fontSize: '12px' }}>{t.settings.streak}</div>
               </div>
             </div>
             
@@ -1608,7 +1839,7 @@ Rules:
               gap: '8px',
               boxShadow: '0 4px 12px rgba(156,39,176,0.3)'
             }}>
-              🎙️ Test Voice
+              🎙️ {t.settings.testVoice}
             </button>
             
             {/* Advanced Settings Toggle */}
@@ -1624,7 +1855,7 @@ Rules:
                 cursor: 'pointer'
               }}
             >
-              {showAdvanced ? '▼ Hide API Settings' : '▶ Show API Settings'}
+              {showAdvanced ? `▼ ${t.settings.hideApi}` : `▶ ${t.settings.showApi}`}
             </button>
             
             {showAdvanced && (
@@ -1673,7 +1904,7 @@ Rules:
                   
                   {/* Voice Selector */}
                   <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
-                    Choose Voice:
+                    {t.settings.chooseVoice}
                   </label>
                   <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
                     <select
@@ -1715,7 +1946,7 @@ Rules:
                   
                   {/* Language Selector */}
                   <label style={{ display: 'block', fontSize: '13px', color: '#666', marginBottom: '6px' }}>
-                    Choose Language:
+                    {t.settings.chooseLanguage}
                   </label>
                   <select
                     value={selectedLanguage}
@@ -1767,7 +1998,7 @@ Rules:
                     borderRadius: '8px',
                     fontSize: '14px',
                     cursor: 'pointer'
-                  }}>💾 Save Settings</button>
+                  }}>💾 {t.settings.saveSettings}</button>
                   <p style={{ fontSize: '11px', color: '#888', marginTop: '6px' }}>
                     Get from elevenlabs.io → Profile → API Key (free tier: 10,000 chars/month)
                   </p>
@@ -1778,12 +2009,12 @@ Rules:
             {/* Current Status */}
             <div style={{ background: 'rgba(129,199,132,0.2)', borderRadius: '12px', padding: '14px 18px', maxWidth: '380px', width: '100%' }}>
               <p style={{ fontSize: '14px', color: '#5D4E4E', lineHeight: 1.5, margin: 0 }}>
-                <strong>Current Setup:</strong><br/>
-                🤖 AI: {settings.useDemoMode ? 'Demo mode' : 'ChatGPT'}<br/>
-                🎙️ Voice: {settings.useElevenlabs && settings.elevenlabsKey 
+                <strong>{t.settings.currentSetup}:</strong><br/>
+                🤖 {t.settings.ai}: {settings.useDemoMode ? t.settings.demoMode : 'ChatGPT'}<br/>
+                🎙️ {t.settings.voice}: {settings.useElevenlabs && settings.elevenlabsKey 
                   ? `ElevenLabs (${VOICE_OPTIONS.find(v => v.id === settings.elevenlabsVoiceId)?.name || 'Sarah'})` 
-                  : 'Browser TTS'}<br/>
-                🌐 Language: {LANGUAGE_OPTIONS.find(l => l.id === settings.language)?.name || 'English'}
+                  : t.settings.browserTts}<br/>
+                🌐 {t.settings.language}: {LANGUAGE_OPTIONS.find(l => l.id === settings.language)?.name || 'English'}
               </p>
             </div>
           </div>
