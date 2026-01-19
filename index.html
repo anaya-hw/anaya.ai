@@ -501,11 +501,27 @@
     const generateDemoLesson = (problemText) => {
       const text = problemText.toLowerCase();
       
-      const addMatch = problemText.match(/(\d+)\s*[\+\＋]\s*(\d+)/);
+      // Clean up OCR artifacts - remove extra spaces, normalize characters
+      const cleanText = problemText
+        .replace(/\s+/g, ' ')           // normalize spaces
+        .replace(/[oO]/g, '0')          // O can be mistaken for 0
+        .replace(/[lI|]/g, '1')         // l, I, | can be mistaken for 1
+        .replace(/[sS]/g, '5')          // S can be mistaken for 5
+        .replace(/[bB]/g, '8')          // B can be mistaken for 8
+        .replace(/×/g, '*')             // multiplication sign
+        .replace(/÷/g, '/')             // division sign
+        .trim();
+      
+      console.log('Original text:', problemText);
+      console.log('Cleaned text:', cleanText);
+      
+      // More flexible addition pattern
+      const addMatch = cleanText.match(/(\d+)\s*[\+\＋\*]\s*(\d+)/);
       if (addMatch) {
         const a = parseInt(addMatch[1]);
         const b = parseInt(addMatch[2]);
         const sum = a + b;
+        console.log('Detected addition:', a, '+', b);
         return {
           subject: 'Math',
           originalText: problemText,
@@ -522,11 +538,13 @@
         };
       }
       
-      const subMatch = problemText.match(/(\d+)\s*[\-\−]\s*(\d+)/);
+      // More flexible subtraction pattern
+      const subMatch = cleanText.match(/(\d+)\s*[\-\−\–]\s*(\d+)/);
       if (subMatch) {
         const a = parseInt(subMatch[1]);
         const b = parseInt(subMatch[2]);
         const diff = Math.max(a - b, 0);
+        console.log('Detected subtraction:', a, '-', b);
         return {
           subject: 'Math',
           originalText: problemText,
@@ -543,16 +561,37 @@
         };
       }
       
-      const numbers = problemText.match(/\d+/g);
-      if (numbers && numbers.length >= 1) {
+      // Try to find any two numbers
+      const numbers = cleanText.match(/\d+/g);
+      if (numbers && numbers.length >= 2) {
+        const a = parseInt(numbers[0]);
+        const b = parseInt(numbers[1]);
+        const sum = a + b;
+        console.log('Found two numbers:', a, b, '- assuming addition');
+        return {
+          subject: 'Math',
+          originalText: problemText,
+          steps: [
+            { text: `I see ${a} and ${b}! Let's add them!`, emoji: '🧮', type: 'intro' },
+            { text: `First, count ${a}!`, emoji: '🍎'.repeat(Math.min(a, 10)), type: 'visual' },
+            { text: `Now add ${b} more!`, emoji: '🍏'.repeat(Math.min(b, 10)), type: 'visual' },
+            { text: `Put them all together!`, emoji: '👆', type: 'action' },
+            { text: `Count them all up!`, emoji: '🔢', type: 'action' },
+            { text: `${a} plus ${b} equals ${sum}!`, emoji: '✅', type: 'answer' },
+            { text: `Great job!`, emoji: '⭐', type: 'celebrate' }
+          ]
+        };
+      }
+      
+      // Single number found
+      if (numbers && numbers.length === 1) {
         return {
           subject: 'Math',
           originalText: problemText,
           steps: [
             { text: `I see some numbers! Let's figure this out!`, emoji: '🔢', type: 'intro' },
-            { text: `I found: ${numbers.join(', ')}`, emoji: '👀', type: 'visual' },
-            { text: `Let's think about what to do with these numbers.`, emoji: '🤔', type: 'think' },
-            { text: `Are we adding? Or subtracting? Let's see!`, emoji: '➕➖', type: 'action' },
+            { text: `I found: ${numbers[0]}`, emoji: '👀', type: 'visual' },
+            { text: `Let's think about what to do with this number.`, emoji: '🤔', type: 'think' },
             { text: `Try counting on your fingers!`, emoji: '🖐️', type: 'action' },
             { text: `You're doing great! Keep thinking!`, emoji: '💪', type: 'encourage' },
             { text: `Wonderful work trying this problem!`, emoji: '⭐', type: 'celebrate' }
@@ -1082,10 +1121,14 @@ Rules:
           }
           
           setStatus(t.scanning.reading);
+          setProgress(20);
+          
+          // Preprocess image for better OCR
+          const preprocessedImage = await preprocessImage(image);
           setProgress(30);
           
           const result = await Tesseract.recognize(
-            image,
+            preprocessedImage,
             'eng',
             {
               logger: m => {
@@ -1097,7 +1140,8 @@ Rules:
           );
           
           const text = result.data.text.trim();
-          console.log('OCR Result:', text);
+          console.log('OCR Raw Result:', text);
+          console.log('OCR Confidence:', result.data.confidence);
           setDetectedText(text);
           
           setProgress(75);
@@ -1134,6 +1178,74 @@ Rules:
             });
           }, 2000);
         }
+      };
+      
+      // Image preprocessing for better OCR
+      const preprocessImage = (imageSrc) => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Scale up small images for better recognition
+            const minSize = 800;
+            const scale = Math.max(1, minSize / Math.min(img.width, img.height));
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            
+            // Draw image
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            // Get image data
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            // Calculate average brightness
+            let totalBrightness = 0;
+            let darkPixels = 0;
+            for (let i = 0; i < data.length; i += 4) {
+              const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+              totalBrightness += brightness;
+              if (brightness < 128) darkPixels++;
+            }
+            const avgBrightness = totalBrightness / (data.length / 4);
+            const darkRatio = darkPixels / (data.length / 4);
+            
+            // Determine if we need to invert (dark background with light text)
+            const needsInvert = darkRatio > 0.6;
+            
+            // Adaptive threshold
+            const threshold = avgBrightness > 200 ? 180 : avgBrightness > 128 ? 140 : 100;
+            
+            console.log('Image analysis - Brightness:', avgBrightness.toFixed(0), 
+                        'Dark ratio:', (darkRatio * 100).toFixed(0) + '%',
+                        'Needs invert:', needsInvert,
+                        'Threshold:', threshold);
+            
+            // Convert to high contrast black and white
+            for (let i = 0; i < data.length; i += 4) {
+              const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+              let value = avg > threshold ? 255 : 0;
+              
+              // Invert if needed (for dark backgrounds)
+              if (needsInvert) {
+                value = value === 255 ? 0 : 255;
+              }
+              
+              data[i] = value;     // R
+              data[i + 1] = value; // G
+              data[i + 2] = value; // B
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            
+            console.log('Preprocessed image size:', canvas.width, 'x', canvas.height);
+            
+            resolve(canvas.toDataURL('image/png'));
+          };
+          img.src = imageSrc;
+        });
       };
       
       return (
@@ -1177,13 +1289,22 @@ Rules:
                 borderRadius: '12px',
                 padding: '12px 16px',
                 marginBottom: '16px',
-                border: '2px solid #E8F5E9'
+                border: '2px solid #E8F5E9',
+                maxWidth: '320px'
               }}>
                 <p style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>
                   📝 {t.scanning.iFound}
                 </p>
-                <p style={{ fontSize: '16px', color: '#333' }}>
-                  {detectedText.slice(0, 100)}{detectedText.length > 100 ? '...' : ''}
+                <p style={{ 
+                  fontSize: '18px', 
+                  color: '#333', 
+                  fontFamily: 'monospace',
+                  background: '#f5f5f5',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  wordBreak: 'break-all'
+                }}>
+                  "{detectedText}"
                 </p>
               </div>
             )}
